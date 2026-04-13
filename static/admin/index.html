@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Кабинет</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">Кабинет</div>
+      <div id="userBar" class="user-bar hidden">
+        <span id="whoami"></span>
+        <button type="button" id="logoutBtn" class="btn ghost">Выйти</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="loginPanel" class="login-wrap">
+        <div class="card login-card">
+          <h1>Вход</h1>
+          <p class="muted">Учётная запись (не VK user_id).</p>
+          <form id="loginForm" class="form">
+            <label>Логин <input name="username" autocomplete="username" required /></label>
+            <label>Пароль <input name="password" type="password" autocomplete="current-password" required /></label>
+            <button type="submit" class="btn primary">Войти</button>
+            <p id="loginError" class="error hidden"></p>
+          </form>
+        </div>
+      </section>
+
+      <section id="dashPanel" class="hidden dash-shell">
+        <aside class="sidebar">
+          <nav class="nav-tabs" aria-label="Разделы">
+            <button type="button" class="nav-tab active" data-tab="appointments">Заявки</button>
+            <button type="button" class="nav-tab" data-tab="questions">Вопросы</button>
+            <button type="button" class="nav-tab" data-tab="profile">Профиль</button>
+            <button type="button" class="nav-tab nav-tab-admin-only hidden" data-tab="users">Пользователи</button>
+          </nav>
+        </aside>
+        <div class="dash-content">
+          <div id="tab-appointments" class="tab-panel">
+            <div class="card">
+              <div class="row space-between">
+                <h1>Заявки</h1>
+                <button type="button" id="refreshAppointmentsBtn" class="btn">Обновить</button>
+              </div>
+              <p id="listError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Дата</th>
+                      <th>Телефон</th>
+                      <th>Родитель</th>
+                      <th>Ребёнок</th>
+                      <th>Возраст</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-questions" class="tab-panel hidden">
+            <div class="card">
+              <div class="row space-between">
+                <h1>Вопросы</h1>
+                <button type="button" id="refreshQuestionsBtn" class="btn">Обновить</button>
+              </div>
+              <p class="muted">Форма на сайте: ФИО и телефон → <code>POST /questions</code></p>
+              <p id="qError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Дата</th>
+                      <th>ФИО</th>
+                      <th>Телефон</th>
+                    </tr>
+                  </thead>
+                  <tbody id="qRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-profile" class="tab-panel hidden">
+            <div class="card">
+              <h1>Профиль</h1>
+              <p class="muted">VK user_id для уведомлений о <strong>новых заявках</strong> и <strong>вопросах</strong> с сайта.</p>
+              <form id="vkForm" class="form">
+                <label>VK user_id <input name="vk_user_id" id="vkUserIdInput" type="number" min="1" placeholder="например 123456789" /></label>
+                <div class="row gap">
+                  <button type="submit" class="btn primary">Сохранить</button>
+                  <button type="button" id="vkClearBtn" class="btn">Отвязать</button>
+                </div>
+                <p id="vkMsg" class="msg hidden"></p>
+              </form>
+            </div>
+          </div>
+
+          <div id="tab-users" class="tab-panel hidden">
+            <div class="card">
+              <div class="row space-between">
+                <h1>Пользователи</h1>
+                <button type="button" id="refreshAdminsBtn" class="btn">Обновить</button>
+              </div>
+              <p id="adminsListError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Логин</th>
+                      <th>Роль</th>
+                      <th>VK id</th>
+                      <th>Активен</th>
+                      <th>Создан</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminRows"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Новый пользователь</h2>
+              <p class="muted"><code>admin</code> — полный доступ; <code>viewer</code> — только заявки и вопросы.</p>
+              <form id="adminForm" class="form">
+                <label>Логин <input name="username" minlength="3" maxlength="64" required /></label>
+                <label>Пароль <input name="password" type="password" minlength="8" maxlength="256" required /></label>
+                <label>Роль
+                  <select name="role">
+                    <option value="viewer" selected>viewer</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </label>
+                <label>VK user_id (необязательно) <input name="vk_user_id" type="number" min="1" placeholder="уведомления" /></label>
+                <button type="submit" class="btn primary">Создать</button>
+                <p id="adminMsg" class="msg hidden"></p>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="editModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card">
+        <h2>Редактировать пользователя</h2>
+        <form id="editAdminForm" class="form form-wide">
+          <input type="hidden" id="edUserId" />
+          <label>Логин <input id="edUsername" required minlength="3" maxlength="64" /></label>
+          <label>Новый пароль <input id="edPassword" type="password" minlength="8" maxlength="256" placeholder="не менять — оставьте пустым" /></label>
+          <label>VK user_id <input id="edVkId" type="number" min="1" placeholder="пусто = отвязать" /></label>
+          <label>Роль
+            <select id="edRole">
+              <option value="admin">admin</option>
+              <option value="viewer">viewer</option>
+            </select>
+          </label>
+          <label class="checkbox-row"><input type="checkbox" id="edActive" /> Активен</label>
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="editCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="editMsg" class="msg hidden"></p>
+        </form>
+      </div>
+    </div>
+
+    <script src="/admin/app.js"></script>
+  </body>
+</html>
