@@ -55,6 +55,7 @@ function setTab(name) {
     show(p, p.id === `tab-${name}`);
   });
   if (name === "appointments") loadAppointments();
+  if (name === "services") loadServiceRequests();
   if (name === "questions") loadQuestions();
   if (name === "profile") loadMe();
   if (name === "users") loadAdmins();
@@ -91,6 +92,31 @@ async function loadAppointments() {
       <td>${escapeHtml(a.parent_name)}</td>
       <td>${escapeHtml(a.child_name)}</td>
       <td>${escapeHtml(String(a.child_age))}</td>
+    `;
+    rows.appendChild(tr);
+  }
+}
+
+async function loadServiceRequests() {
+  $("svcError").textContent = "";
+  show($("svcError"), false);
+  const rows = $("svcRows");
+  rows.innerHTML = "";
+  const data = await apiFetch("/service-requests?limit=200");
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="6" class="muted">Пока нет заявок на услуги</td></tr>`;
+    return;
+  }
+  for (const s of data) {
+    const tr = document.createElement("tr");
+    const dt = new Date(s.created_at);
+    tr.innerHTML = `
+      <td>${dt.toLocaleString()}</td>
+      <td>${escapeHtml(s.service)}</td>
+      <td>${escapeHtml(s.phone)}</td>
+      <td>${escapeHtml(s.parent_name)}</td>
+      <td>${escapeHtml(s.child_name)}</td>
+      <td>${escapeHtml(String(s.child_age))}</td>
     `;
     rows.appendChild(tr);
   }
@@ -224,6 +250,15 @@ $("refreshAppointmentsBtn").addEventListener("click", async () => {
   } catch (err) {
     $("listError").textContent = err.message;
     show($("listError"), true);
+  }
+});
+
+$("refreshServicesBtn").addEventListener("click", async () => {
+  try {
+    await loadServiceRequests();
+  } catch (err) {
+    $("svcError").textContent = err.message;
+    show($("svcError"), true);
   }
 });
 

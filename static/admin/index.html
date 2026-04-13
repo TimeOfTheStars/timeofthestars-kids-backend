@@ -33,6 +33,7 @@
         <aside class="sidebar">
           <nav class="nav-tabs" aria-label="Разделы">
             <button type="button" class="nav-tab active" data-tab="appointments">Заявки</button>
+            <button type="button" class="nav-tab" data-tab="services">Услуги</button>
             <button type="button" class="nav-tab" data-tab="questions">Вопросы</button>
             <button type="button" class="nav-tab" data-tab="profile">Профиль</button>
             <button type="button" class="nav-tab nav-tab-admin-only hidden" data-tab="users">Пользователи</button>
@@ -58,6 +59,32 @@
                     </tr>
                   </thead>
                   <tbody id="rows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-services" class="tab-panel hidden">
+            <div class="card">
+              <div class="row space-between">
+                <h1>Заявки на услуги</h1>
+                <button type="button" id="refreshServicesBtn" class="btn">Обновить</button>
+              </div>
+              <p class="muted">Форма на сайте: те же поля, что у записи, плюс услуга → <code>POST /service-requests</code></p>
+              <p id="svcError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Дата</th>
+                      <th>Услуга</th>
+                      <th>Телефон</th>
+                      <th>Родитель</th>
+                      <th>Ребёнок</th>
+                      <th>Возраст</th>
+                    </tr>
+                  </thead>
+                  <tbody id="svcRows"></tbody>
                 </table>
               </div>
             </div>
@@ -89,7 +116,7 @@
           <div id="tab-profile" class="tab-panel hidden">
             <div class="card">
               <h1>Профиль</h1>
-              <p class="muted">VK user_id для уведомлений о <strong>новых заявках</strong> и <strong>вопросах</strong> с сайта.</p>
+              <p class="muted">VK user_id для уведомлений о <strong>новых заявках</strong>, <strong>заявках на услуги</strong> и <strong>вопросах</strong> с сайта.</p>
               <form id="vkForm" class="form">
                 <label>VK user_id <input name="vk_user_id" id="vkUserIdInput" type="number" min="1" placeholder="например 123456789" /></label>
                 <div class="row gap">
@@ -127,7 +154,7 @@
 
             <div class="card">
               <h2>Новый пользователь</h2>
-              <p class="muted"><code>admin</code> — полный доступ; <code>viewer</code> — только заявки и вопросы.</p>
+              <p class="muted"><code>admin</code> — полный доступ; <code>viewer</code> — заявки, услуги и вопросы.</p>
               <form id="adminForm" class="form">
                 <label>Логин <input name="username" minlength="3" maxlength="64" required /></label>
                 <label>Пароль <input name="password" type="password" minlength="8" maxlength="256" required /></label>

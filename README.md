@@ -86,6 +86,22 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 }
 ```
 
+### `POST /service-requests`
+
+То же, что запись на приём, плюс поле **`service`** (строка с фронта, до 512 символов):
+
+```json
+{
+  "phone": "+79991234567",
+  "parent_name": "Иванова Мария Сергеевна",
+  "child_name": "Иванов Пётр Иванович",
+  "child_age": 7,
+  "service": "Диагностика речи"
+}
+```
+
+Ответ `201`: как у заявок — `{ "id", "status": "created" | "created_notify_failed" }`. Уведомления в VK — **тем же списком** `vk_user_id`, что для записей и вопросов.
+
 ### `POST /questions`
 
 Форма «задать вопрос» (ФИО и телефон):
@@ -108,25 +124,25 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### Роли
 
 - **`admin`** — полный доступ: вкладка **Пользователи**, список/создание/редактирование учёток (`GET`/`POST`/`PATCH /api/admin/admins`).
-- **`viewer`** — только **Заявки**, **Вопросы** и **Профиль** (свой `VK user_id`). Эндпоинты `/api/admin/admins*` возвращают **403**.
+- **`viewer`** — **Заявки**, **Услуги**, **Вопросы** и **Профиль** (свой `VK user_id`). Эндпоинты `/api/admin/admins*` возвращают **403**.
 
 Первый пользователь из bootstrap и все уже существующие записи после миграции получают роль **`admin`**. Новые пользователи по умолчанию создаются как **`viewer`**, пока `admin` не выставит роль `admin` в форме.
 
 ### UI
 
-**`/admin/`**: вкладки **Заявки** · **Вопросы** · **Профиль** (VK для всех) · **Пользователи** (только при `role === "admin"`). В «Пользователях»: таблица, создание, кнопка **Изменить** (логин, пароль, VK id, роль, активен).
+**`/admin/`**: вкладки **Заявки** · **Услуги** · **Вопросы** · **Профиль** (VK для всех) · **Пользователи** (только при `role === "admin"`). В «Пользователях»: таблица, создание, кнопка **Изменить** (логин, пароль, VK id, роль, активен).
 
 ### API (`Authorization: Bearer <token>`)
 
 - `POST /api/admin/auth/login` — `{ "username", "password" }`
 - `GET /api/admin/me` — `username`, `role`, `vk_user_id`
 - `PATCH /api/admin/me/vk` — `{ "vk_user_id": <число> | null }`
-- `GET /api/admin/appointments`, `GET /api/admin/questions` — любая активная роль
+- `GET /api/admin/appointments`, `GET /api/admin/service-requests`, `GET /api/admin/questions` — любая активная роль
 - `GET /api/admin/admins`, `POST /api/admin/admins`, `PATCH /api/admin/admins/{user_id}` — **только `admin`**
 - `POST /api/admin/admins` — тело: `username`, `password`, `role` (`admin`|`viewer`), опционально `vk_user_id`
 - `PATCH /api/admin/admins/{user_id}` — любое подмножество: `username`, `password`, `vk_user_id` (или `null`), `role`, `is_active`. Нельзя отключить или понизить **последнего** активного `admin`.
 
-Уведомления VK о **новых заявках** и **новых вопросах**: **каждый активный** пользователь с заполненным **`vk_user_id`** (любая роль).
+Уведомления VK о **новых заявках**, **заявках на услуги** и **новых вопросах**: **каждый активный** пользователь с заполненным **`vk_user_id`** (любая роль).
 
 ## VK
 

@@ -15,6 +15,7 @@ from app.db.base import Base
 from app.models.admin_user import AdminUser  # noqa: F401 — register metadata
 from app.models.appointment import Appointment  # noqa: F401 — register metadata
 from app.models.question_request import QuestionRequest  # noqa: F401 — register metadata
+from app.models.service_request import ServiceRequest  # noqa: F401 — register metadata
 
 config = context.config
 

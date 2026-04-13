@@ -60,6 +60,24 @@ class VKClient:
             f"Телефон: {phone}"
         )
 
+    def _build_service_request_message(
+        self,
+        *,
+        phone: str,
+        parent_name: str,
+        child_name: str,
+        child_age: int,
+        service: str,
+    ) -> str:
+        return (
+            "Новая заявка на услугу:\n"
+            f"Услуга: {service}\n"
+            f"Телефон: {phone}\n"
+            f"ФИО родителя: {parent_name}\n"
+            f"ФИО ребёнка: {child_name}\n"
+            f"Возраст: {child_age}"
+        )
+
     async def _notify_recipients(self, *, message: str, recipient_user_ids: list[int]) -> None:
         if not recipient_user_ids:
             return
@@ -159,4 +177,24 @@ class VKClient:
     ) -> None:
         """Отправить уведомление о вопросе с формы (те же получатели, что и для заявок)."""
         text = self._build_question_message(full_name=full_name, phone=phone)
+        await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
+
+    async def notify_new_service_request(
+        self,
+        *,
+        phone: str,
+        parent_name: str,
+        child_name: str,
+        child_age: int,
+        service: str,
+        recipient_user_ids: list[int],
+    ) -> None:
+        """Уведомление о заявке на услугу (те же VK user_id, что для записей и вопросов)."""
+        text = self._build_service_request_message(
+            phone=phone,
+            parent_name=parent_name,
+            child_name=child_name,
+            child_age=child_age,
+            service=service,
+        )
         await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)

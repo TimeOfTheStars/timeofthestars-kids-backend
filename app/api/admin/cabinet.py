@@ -16,6 +16,7 @@ from app.models.admin_user import AdminUser
 from app.repositories import admin_users as admin_repo
 from app.repositories import appointments as appointments_repo
 from app.repositories import questions as questions_repo
+from app.repositories import service_requests as service_requests_repo
 from app.schemas.admin import (
     AdminCreateRequest,
     AdminListItem,
@@ -25,6 +26,7 @@ from app.schemas.admin import (
     AppointmentListItem,
 )
 from app.schemas.question import QuestionListItem
+from app.schemas.service_request import ServiceRequestListItem
 
 router = APIRouter()
 
@@ -66,6 +68,17 @@ async def admin_list_questions(
 ) -> list[QuestionListItem]:
     rows = await questions_repo.list_questions(session, skip=skip, limit=limit)
     return [QuestionListItem.model_validate(r) for r in rows]
+
+
+@router.get("/service-requests", response_model=list[ServiceRequestListItem])
+async def admin_list_service_requests(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[ServiceRequestListItem]:
+    rows = await service_requests_repo.list_service_requests(session, skip=skip, limit=limit)
+    return [ServiceRequestListItem.model_validate(r) for r in rows]
 
 
 @router.get("/admins", response_model=list[AdminListItem])
