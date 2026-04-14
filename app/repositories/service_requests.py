@@ -1,6 +1,8 @@
 """Persistence for service requests."""
 
-from sqlalchemy import select
+import uuid
+
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.service_request import ServiceRequest
@@ -42,3 +44,18 @@ async def list_service_requests(
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def delete_service_request(session: AsyncSession, service_request_id: uuid.UUID) -> bool:
+    """Delete one service request by id."""
+    stmt = delete(ServiceRequest).where(ServiceRequest.id == service_request_id)
+    result = await session.execute(stmt)
+    await session.commit()
+    return bool(result.rowcount)
+
+
+async def delete_all_service_requests(session: AsyncSession) -> int:
+    """Delete all service requests and return deleted rows count."""
+    result = await session.execute(delete(ServiceRequest))
+    await session.commit()
+    return int(result.rowcount or 0)

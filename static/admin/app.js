@@ -48,6 +48,7 @@ function isAdmin() {
 
 function setTab(name) {
   if (name === "users" && !isAdmin()) return;
+  window.__activeTab = name;
   document.querySelectorAll(".nav-tab").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === name);
   });
@@ -59,6 +60,29 @@ function setTab(name) {
   if (name === "questions") loadQuestions();
   if (name === "profile") loadMe();
   if (name === "users") loadAdmins();
+}
+
+async function confirmAndDelete({ question, request, onDone, errorTargetId }) {
+  if (!window.confirm(question)) return;
+  try {
+    await request();
+    if (onDone) await onDone();
+  } catch (err) {
+    const target = $(errorTargetId);
+    if (target) {
+      target.textContent = err.message;
+      show(target, true);
+    }
+  }
+}
+
+function makeDeleteButton(onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn danger btn-small";
+  btn.textContent = "Удалить";
+  btn.addEventListener("click", onClick);
+  return btn;
 }
 
 async function loadMe() {
@@ -80,19 +104,32 @@ async function loadAppointments() {
   rows.innerHTML = "";
   const data = await apiFetch("/appointments?limit=200");
   if (!data.length) {
-    rows.innerHTML = `<tr><td colspan="5" class="muted">Пока нет заявок</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="6" class="muted">Пока нет заявок</td></tr>`;
     return;
   }
   for (const a of data) {
     const tr = document.createElement("tr");
     const dt = new Date(a.created_at);
     tr.innerHTML = `
-      <td>${dt.toLocaleString()}</td>
-      <td>${escapeHtml(a.phone)}</td>
-      <td>${escapeHtml(a.parent_name)}</td>
-      <td>${escapeHtml(a.child_name)}</td>
-      <td>${escapeHtml(String(a.child_age))}</td>
+      <td data-label="Дата">${dt.toLocaleString()}</td>
+      <td data-label="Телефон">${escapeHtml(a.phone)}</td>
+      <td data-label="Родитель">${escapeHtml(a.parent_name)}</td>
+      <td data-label="Ребёнок">${escapeHtml(a.child_name)}</td>
+      <td data-label="Возраст">${escapeHtml(String(a.child_age))}</td>
     `;
+    const tdAction = document.createElement("td");
+    tdAction.setAttribute("data-label", "Действие");
+    tdAction.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: "Удалить эту заявку?",
+          request: () => apiFetch(`/appointments/${a.id}`, { method: "DELETE" }),
+          onDone: loadAppointments,
+          errorTargetId: "listError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAction);
     rows.appendChild(tr);
   }
 }
@@ -104,20 +141,33 @@ async function loadServiceRequests() {
   rows.innerHTML = "";
   const data = await apiFetch("/service-requests?limit=200");
   if (!data.length) {
-    rows.innerHTML = `<tr><td colspan="6" class="muted">Пока нет заявок на услуги</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="7" class="muted">Пока нет заявок на услуги</td></tr>`;
     return;
   }
   for (const s of data) {
     const tr = document.createElement("tr");
     const dt = new Date(s.created_at);
     tr.innerHTML = `
-      <td>${dt.toLocaleString()}</td>
-      <td>${escapeHtml(s.service)}</td>
-      <td>${escapeHtml(s.phone)}</td>
-      <td>${escapeHtml(s.parent_name)}</td>
-      <td>${escapeHtml(s.child_name)}</td>
-      <td>${escapeHtml(String(s.child_age))}</td>
+      <td data-label="Дата">${dt.toLocaleString()}</td>
+      <td data-label="Услуга">${escapeHtml(s.service)}</td>
+      <td data-label="Телефон">${escapeHtml(s.phone)}</td>
+      <td data-label="Родитель">${escapeHtml(s.parent_name)}</td>
+      <td data-label="Ребёнок">${escapeHtml(s.child_name)}</td>
+      <td data-label="Возраст">${escapeHtml(String(s.child_age))}</td>
     `;
+    const tdAction = document.createElement("td");
+    tdAction.setAttribute("data-label", "Действие");
+    tdAction.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: "Удалить эту заявку на услугу?",
+          request: () => apiFetch(`/service-requests/${s.id}`, { method: "DELETE" }),
+          onDone: loadServiceRequests,
+          errorTargetId: "svcError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAction);
     rows.appendChild(tr);
   }
 }
@@ -129,17 +179,30 @@ async function loadQuestions() {
   rows.innerHTML = "";
   const data = await apiFetch("/questions?limit=200");
   if (!data.length) {
-    rows.innerHTML = `<tr><td colspan="3" class="muted">Пока нет вопросов</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="4" class="muted">Пока нет вопросов</td></tr>`;
     return;
   }
   for (const q of data) {
     const tr = document.createElement("tr");
     const dt = new Date(q.created_at);
     tr.innerHTML = `
-      <td>${dt.toLocaleString()}</td>
-      <td>${escapeHtml(q.full_name)}</td>
-      <td>${escapeHtml(q.phone)}</td>
+      <td data-label="Дата">${dt.toLocaleString()}</td>
+      <td data-label="ФИО">${escapeHtml(q.full_name)}</td>
+      <td data-label="Телефон">${escapeHtml(q.phone)}</td>
     `;
+    const tdAction = document.createElement("td");
+    tdAction.setAttribute("data-label", "Действие");
+    tdAction.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: "Удалить этот вопрос?",
+          request: () => apiFetch(`/questions/${q.id}`, { method: "DELETE" }),
+          onDone: loadQuestions,
+          errorTargetId: "qError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAction);
     rows.appendChild(tr);
   }
 }
@@ -280,6 +343,24 @@ $("refreshAdminsBtn").addEventListener("click", async () => {
   }
 });
 
+$("deleteAllBtn").addEventListener("click", async () => {
+  const msg = $("deleteAllMsg");
+  msg.textContent = "";
+  show(msg, false);
+  if (!window.confirm("Удалить вообще все заявки, заявки на услуги и вопросы? Действие необратимо.")) return;
+  try {
+    const res = await apiFetch("/requests/all", { method: "DELETE" });
+    msg.textContent = `Удалено: заявки ${res.appointments}, услуги ${res.service_requests}, вопросы ${res.questions}.`;
+    show(msg, true);
+    if (window.__activeTab === "appointments") await loadAppointments();
+    if (window.__activeTab === "services") await loadServiceRequests();
+    if (window.__activeTab === "questions") await loadQuestions();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
 $("vkForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const raw = String($("vkUserIdInput").value || "").trim();
@@ -399,6 +480,7 @@ $("editAdminForm").addEventListener("submit", async (e) => {
 });
 
 (async function boot() {
+  window.__activeTab = "appointments";
   if (!getToken()) return;
   try {
     showDashboard();

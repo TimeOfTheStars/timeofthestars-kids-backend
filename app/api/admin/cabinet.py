@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.roles import ROLE_ADMIN
@@ -79,6 +79,54 @@ async def admin_list_service_requests(
 ) -> list[ServiceRequestListItem]:
     rows = await service_requests_repo.list_service_requests(session, skip=skip, limit=limit)
     return [ServiceRequestListItem.model_validate(r) for r in rows]
+
+
+@router.delete("/appointments/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_appointment(
+    appointment_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await appointments_repo.delete_appointment(session, appointment_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/questions/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_question(
+    question_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await questions_repo.delete_question(session, question_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Вопрос не найден")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/service-requests/{service_request_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_service_request(
+    service_request_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await service_requests_repo.delete_service_request(session, service_request_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка на услугу не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/requests/all")
+async def admin_delete_all_requests(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    deleted_appointments = await appointments_repo.delete_all_appointments(session)
+    deleted_service_requests = await service_requests_repo.delete_all_service_requests(session)
+    deleted_questions = await questions_repo.delete_all_questions(session)
+    return {
+        "appointments": deleted_appointments,
+        "service_requests": deleted_service_requests,
+        "questions": deleted_questions,
+    }
 
 
 @router.get("/admins", response_model=list[AdminListItem])

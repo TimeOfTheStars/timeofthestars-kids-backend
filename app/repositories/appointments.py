@@ -1,6 +1,8 @@
 """Appointment persistence."""
 
-from sqlalchemy import select
+import uuid
+
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
@@ -42,3 +44,18 @@ async def list_appointments(
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def delete_appointment(session: AsyncSession, appointment_id: uuid.UUID) -> bool:
+    """Delete one appointment by id."""
+    stmt = delete(Appointment).where(Appointment.id == appointment_id)
+    result = await session.execute(stmt)
+    await session.commit()
+    return bool(result.rowcount)
+
+
+async def delete_all_appointments(session: AsyncSession) -> int:
+    """Delete all appointments and return deleted rows count."""
+    result = await session.execute(delete(Appointment))
+    await session.commit()
+    return int(result.rowcount or 0)

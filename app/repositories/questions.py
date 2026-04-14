@@ -1,6 +1,8 @@
 """Хранение вопросов с сайта."""
 
-from sqlalchemy import select
+import uuid
+
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.question_request import QuestionRequest
@@ -33,3 +35,18 @@ async def list_questions(
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def delete_question(session: AsyncSession, question_id: uuid.UUID) -> bool:
+    """Удалить один вопрос по id."""
+    stmt = delete(QuestionRequest).where(QuestionRequest.id == question_id)
+    result = await session.execute(stmt)
+    await session.commit()
+    return bool(result.rowcount)
+
+
+async def delete_all_questions(session: AsyncSession) -> int:
+    """Удалить все вопросы и вернуть количество удаленных строк."""
+    result = await session.execute(delete(QuestionRequest))
+    await session.commit()
+    return int(result.rowcount or 0)

@@ -40,6 +40,17 @@
           </nav>
         </aside>
         <div class="dash-content">
+          <div class="card danger-card">
+            <div class="row space-between top-actions">
+              <div>
+                <h2>Очистка данных</h2>
+                <p class="muted">Удаляет все заявки, заявки на услуги и вопросы.</p>
+              </div>
+              <button type="button" id="deleteAllBtn" class="btn danger">Удалить всё</button>
+            </div>
+            <p id="deleteAllMsg" class="msg hidden"></p>
+          </div>
+
           <div id="tab-appointments" class="tab-panel">
             <div class="card">
               <div class="row space-between">
@@ -56,6 +67,7 @@
                       <th>Родитель</th>
                       <th>Ребёнок</th>
                       <th>Возраст</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody id="rows"></tbody>
@@ -82,6 +94,7 @@
                       <th>Родитель</th>
                       <th>Ребёнок</th>
                       <th>Возраст</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody id="svcRows"></tbody>
@@ -105,6 +118,7 @@
                       <th>Дата</th>
                       <th>ФИО</th>
                       <th>Телефон</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody id="qRows"></tbody>
