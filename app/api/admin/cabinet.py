@@ -15,10 +15,11 @@ from app.core.security import hash_password
 from app.db.session import get_db_session
 from app.deps import get_current_admin, require_admin_role
 from app.models.admin_user import AdminUser
+from app.clients.vk_client import VKAPIError
 from app.repositories import admin_users as admin_repo
 from app.repositories import appointments as appointments_repo
+from app.repositories import news_posts as news_repo
 from app.repositories import questions as questions_repo
-from app.clients.vk_client import VKAPIError
 from app.repositories import reviews as reviews_repo
 from app.repositories import service_requests as service_requests_repo
 from app.schemas.admin import (
@@ -29,6 +30,7 @@ from app.schemas.admin import (
     AdminVkPatchRequest,
     AppointmentListItem,
 )
+from app.schemas.news_post import NewsPostCreate, NewsPostListItem, NewsPostUpdate
 from app.schemas.question import QuestionListItem
 from app.schemas.review import (
     ReviewCreate,
@@ -37,7 +39,9 @@ from app.schemas.review import (
     ReviewUpdate,
 )
 from app.schemas.service_request import ServiceRequestListItem
+from app.services import news_posts as news_service
 from app.services import reviews as reviews_service
+from app.services.news_posts import NewsPostError
 
 router = APIRouter()
 
@@ -210,18 +214,119 @@ async def admin_sync_reviews(
     try:
         return await reviews_service.sync_reviews_from_vk(session, http_client, settings)
     except VKAPIError as exc:
-        if exc.error_code == 27:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=(
-                    "VK не разрешает board.getComments с group-токеном. "
-                    "Задайте VK_READ_TOKEN: сервисный ключ приложения VK или user access token."
-                ),
-            ) from exc
-        raise HTTPException(
+        raise _vk_error_to_http(exc) from exc
+
+
+def _news_error_to_http(exc: NewsPostError) -> HTTPException:
+    if exc.code == "duplicate":
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    if exc.code == "not_found":
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+def _vk_error_to_http(exc: VKAPIError) -> HTTPException:
+    if exc.error_code == 27:
+        return HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"VK API error {exc.error_code}: {exc.error_msg}",
-        ) from exc
+            detail=(
+                "VK не разрешает чтение с group-токеном. "
+                "Задайте VK_READ_TOKEN: сервисный ключ приложения VK или user access token."
+            ),
+        )
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=f"VK API error {exc.error_code}: {exc.error_msg}",
+    )
+
+
+@router.get("/news", response_model=list[NewsPostListItem])
+async def admin_list_news(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> list[NewsPostListItem]:
+    rows = await news_repo.list_all(session, skip=skip, limit=limit)
+    return [NewsPostListItem.model_validate(r) for r in rows]
+
+
+@router.post("/news", response_model=NewsPostListItem, status_code=status.HTTP_201_CREATED)
+async def admin_create_news(
+    body: NewsPostCreate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    http_client: Annotated[httpx.AsyncClient, Depends(_get_http_client)],
+) -> NewsPostListItem:
+    """Принимает URL поста VK, тянет текст и картинку, сохраняет."""
+    try:
+        row = await news_service.import_news_post_from_url(
+            session,
+            http_client,
+            settings,
+            url=body.url,
+            position=body.position,
+            is_visible=body.is_visible,
+        )
+    except NewsPostError as exc:
+        raise _news_error_to_http(exc) from exc
+    except VKAPIError as exc:
+        raise _vk_error_to_http(exc) from exc
+    return NewsPostListItem.model_validate(row)
+
+
+@router.patch("/news/{news_id}", response_model=NewsPostListItem)
+async def admin_update_news(
+    news_id: uuid.UUID,
+    body: NewsPostUpdate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> NewsPostListItem:
+    raw = body.model_dump(exclude_unset=True)
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нет полей для обновления")
+    row = await news_repo.update_one(session, news_id, raw)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Новость не найдена")
+    return NewsPostListItem.model_validate(row)
+
+
+@router.post("/news/{news_id}/refresh", response_model=NewsPostListItem)
+async def admin_refresh_news(
+    news_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    http_client: Annotated[httpx.AsyncClient, Depends(_get_http_client)],
+) -> NewsPostListItem:
+    """Перетянуть текст и картинку из VK, перезаписав текущие значения."""
+    row = await news_repo.get_by_id(session, news_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Новость не найдена")
+    try:
+        row = await news_service.refresh_news_post_from_vk(
+            session,
+            http_client,
+            settings,
+            row=row,
+        )
+    except NewsPostError as exc:
+        raise _news_error_to_http(exc) from exc
+    except VKAPIError as exc:
+        raise _vk_error_to_http(exc) from exc
+    return NewsPostListItem.model_validate(row)
+
+
+@router.delete("/news/{news_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_news(
+    news_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await news_repo.delete_one(session, news_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Новость не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/admins", response_model=list[AdminListItem])

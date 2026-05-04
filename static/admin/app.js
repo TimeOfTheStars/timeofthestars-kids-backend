@@ -59,6 +59,7 @@ function setTab(name) {
   if (name === "services") loadServiceRequests();
   if (name === "questions") loadQuestions();
   if (name === "reviews") loadReviews();
+  if (name === "news") loadNews();
   if (name === "profile") loadMe();
   if (name === "users") loadAdmins();
 }
@@ -304,6 +305,72 @@ function openReviewEditModal(r) {
 function closeReviewEditModal() {
   show($("reviewEditModal"), false);
   $("reviewEditModal").setAttribute("aria-hidden", "true");
+}
+
+async function loadNews() {
+  $("newsError").textContent = "";
+  show($("newsError"), false);
+  const rows = $("newsRows");
+  rows.innerHTML = "";
+  const data = await apiFetch("/news?limit=200");
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="6" class="muted">Пока нет новостей</td></tr>`;
+    return;
+  }
+  for (const n of data) {
+    const tr = document.createElement("tr");
+    const imgCell = n.image
+      ? `<img src="${escapeHtml(n.image)}" alt="" class="news-thumb" />`
+      : '<span class="muted">—</span>';
+    const preview = n.excerpt.length > 220 ? n.excerpt.slice(0, 220) + "…" : n.excerpt;
+    const safeUrl = escapeHtml(n.url);
+    tr.innerHTML = `
+      <td data-label="Картинка">${imgCell}</td>
+      <td data-label="Текст" class="review-text">${escapeHtml(preview)}</td>
+      <td data-label="Поз.">${escapeHtml(String(n.position))}</td>
+      <td data-label="Видим">${n.is_visible ? "да" : "нет"}</td>
+      <td data-label="Ссылка"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">VK ${n.vk_owner_id}_${n.vk_post_id}</a></td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn";
+    editBtn.textContent = "Изменить";
+    editBtn.addEventListener("click", () => openNewsEditModal(n));
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(document.createTextNode(" "));
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: "Удалить эту новость?",
+          request: () => apiFetch(`/news/${n.id}`, { method: "DELETE" }),
+          onDone: loadNews,
+          errorTargetId: "newsError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+function openNewsEditModal(n) {
+  $("neId").value = n.id;
+  $("neUrl").value = n.url;
+  $("neImage").value = n.image || "";
+  $("neExcerpt").value = n.excerpt || "";
+  $("nePosition").value = String(n.position);
+  $("neVisible").checked = !!n.is_visible;
+  $("newsEditMsg").textContent = "";
+  show($("newsEditMsg"), false);
+  show($("newsEditModal"), true);
+  $("newsEditModal").setAttribute("aria-hidden", "false");
+}
+
+function closeNewsEditModal() {
+  show($("newsEditModal"), false);
+  $("newsEditModal").setAttribute("aria-hidden", "true");
 }
 
 function openEditModal(u) {
@@ -596,6 +663,110 @@ $("reviewEditForm").addEventListener("submit", async (e) => {
   } catch (err) {
     msg.textContent = err.message;
     show(msg, true);
+  }
+});
+
+$("refreshNewsBtn").addEventListener("click", async () => {
+  try {
+    await loadNews();
+  } catch (err) {
+    $("newsError").textContent = err.message;
+    show($("newsError"), true);
+  }
+});
+
+$("newsCreateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("newsCreateMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const url = String($("ncUrl").value || "").trim();
+  if (!url) {
+    msg.textContent = "Вставьте ссылку на пост.";
+    show(msg, true);
+    return;
+  }
+  const positionRaw = String($("ncPosition").value || "0").trim();
+  const position = Number.parseInt(positionRaw, 10);
+  const payload = {
+    url,
+    position: Number.isFinite(position) && position >= 0 ? position : 0,
+    is_visible: $("ncVisible").checked,
+  };
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  try {
+    await apiFetch("/news", { method: "POST", body: JSON.stringify(payload) });
+    msg.textContent = "Импортировано.";
+    show(msg, true);
+    e.target.reset();
+    $("ncVisible").checked = true;
+    $("ncPosition").value = "0";
+    await loadNews();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+$("newsEditCancelBtn").addEventListener("click", closeNewsEditModal);
+$("newsEditModal").addEventListener("click", (e) => {
+  if (e.target === $("newsEditModal")) closeNewsEditModal();
+});
+
+$("newsEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = $("neId").value;
+  const msg = $("newsEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const url = String($("neUrl").value || "").trim();
+  const excerpt = String($("neExcerpt").value || "").trim();
+  const image = String($("neImage").value || "").trim();
+  const positionRaw = String($("nePosition").value || "0").trim();
+  const position = Number.parseInt(positionRaw, 10);
+  if (!url) {
+    msg.textContent = "Ссылка обязательна.";
+    show(msg, true);
+    return;
+  }
+  const payload = {
+    url,
+    excerpt,
+    image: image || null,
+    position: Number.isFinite(position) && position >= 0 ? position : 0,
+    is_visible: $("neVisible").checked,
+  };
+  try {
+    await apiFetch(`/news/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    closeNewsEditModal();
+    await loadNews();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
+$("neRefreshBtn").addEventListener("click", async () => {
+  const id = $("neId").value;
+  const msg = $("newsEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  if (!id) return;
+  $("neRefreshBtn").disabled = true;
+  try {
+    const updated = await apiFetch(`/news/${id}/refresh`, { method: "POST" });
+    $("neImage").value = updated.image || "";
+    $("neExcerpt").value = updated.excerpt || "";
+    msg.textContent = "Обновлено из VK.";
+    show(msg, true);
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  } finally {
+    $("neRefreshBtn").disabled = false;
   }
 });
 

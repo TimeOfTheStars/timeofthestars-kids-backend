@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 VK_METHOD_URL = "https://api.vk.com/method/messages.send"
 VK_BOARD_GET_COMMENTS_URL = "https://api.vk.com/method/board.getComments"
+VK_WALL_GET_BY_ID_URL = "https://api.vk.com/method/wall.getById"
 
 # board.getComments отдаёт максимум 100 за раз.
 _VK_BOARD_PAGE_SIZE = 100
@@ -313,6 +314,78 @@ class VKClient:
 
         raise RuntimeError("VKClient._board_get_comments_page: retry loop exited unexpectedly")
 
+    async def fetch_wall_post(
+        self,
+        *,
+        owner_id: int,
+        post_id: int,
+    ) -> dict[str, Any] | None:
+        """Стянуть один пост со стены (wall.getById).
+
+        Возвращает {"text": str, "image": str | None} или None, если пост недоступен.
+        Если у поста нет картинки/текста — пробуем взять из repost (copy_history).
+        """
+        read_token = self._settings.vk_read_token or self._settings.vk_token
+        params: dict[str, Any] = {
+            "access_token": read_token,
+            "v": self._settings.vk_api_version,
+            "posts": f"{owner_id}_{post_id}",
+            "extended": 0,
+            "lang": "ru",
+        }
+        attempts = self._settings.vk_retry_attempts
+        backoff = self._settings.vk_retry_backoff_seconds
+
+        for attempt in range(1, attempts + 1):
+            try:
+                response = await self._http.get(VK_WALL_GET_BY_ID_URL, params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if "error" in payload:
+                    err = payload["error"]
+                    code = int(err.get("error_code", 0))
+                    msg = str(err.get("error_msg", "unknown"))
+                    if code in _RETRY_VK_ERROR_CODES and attempt < attempts:
+                        await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+                        continue
+                    raise VKAPIError(code, msg)
+                # VK может вернуть и {"response": [post, ...]} и {"response": {"items": [...]}}.
+                resp = payload.get("response")
+                if isinstance(resp, dict):
+                    items = resp.get("items") or []
+                elif isinstance(resp, list):
+                    items = resp
+                else:
+                    items = []
+                if not items:
+                    return None
+                post = items[0]
+                if not isinstance(post, dict):
+                    return None
+                return {
+                    "text": _extract_post_text(post),
+                    "image": _extract_post_image(post),
+                }
+            except (httpx.TimeoutException, httpx.TransportError):
+                if attempt >= attempts:
+                    logger.exception(
+                        "VK wall.getById transport error",
+                        extra={"attempt": attempt, "owner_id": owner_id, "post_id": post_id},
+                    )
+                    raise
+                await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code < 500 or attempt >= attempts:
+                    logger.warning(
+                        "VK wall.getById HTTP error",
+                        extra={"status_code": status_code, "attempt": attempt},
+                    )
+                    raise
+                await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+
+        raise RuntimeError("VKClient.fetch_wall_post: retry loop exited unexpectedly")
+
     async def notify_new_service_request(
         self,
         *,
@@ -332,3 +405,53 @@ class VKClient:
             service=service,
         )
         await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
+
+
+def _extract_post_text(post: dict[str, Any]) -> str:
+    """Достать текст поста; если основной пуст и есть репост — взять из copy_history."""
+    text = (post.get("text") or "").strip()
+    if text:
+        return text
+    for repost in post.get("copy_history") or []:
+        if isinstance(repost, dict):
+            t = (repost.get("text") or "").strip()
+            if t:
+                return t
+    return ""
+
+
+def _extract_post_image(post: dict[str, Any]) -> str | None:
+    """Найти первое прикреплённое фото. Если в основном посте нет — посмотреть repost."""
+    photo = _photo_from_attachments(post.get("attachments"))
+    if photo:
+        return photo
+    for repost in post.get("copy_history") or []:
+        if isinstance(repost, dict):
+            photo = _photo_from_attachments(repost.get("attachments"))
+            if photo:
+                return photo
+    return None
+
+
+def _photo_from_attachments(attachments: Any) -> str | None:
+    if not isinstance(attachments, list):
+        return None
+    for att in attachments:
+        if not isinstance(att, dict) or att.get("type") != "photo":
+            continue
+        photo = att.get("photo")
+        if not isinstance(photo, dict):
+            continue
+        sizes = photo.get("sizes")
+        if not isinstance(sizes, list) or not sizes:
+            continue
+        def _area(s: Any) -> int:
+            if not isinstance(s, dict):
+                return 0
+            return int(s.get("width") or 0) * int(s.get("height") or 0)
+        best = max(sizes, key=_area)
+        if isinstance(best, dict):
+            url_value = best.get("url")
+            if isinstance(url_value, str) and url_value:
+                return url_value
+    return None
