@@ -5,9 +5,11 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings, get_settings
 from app.core.roles import ROLE_ADMIN
 from app.core.security import hash_password
 from app.db.session import get_db_session
@@ -16,6 +18,8 @@ from app.models.admin_user import AdminUser
 from app.repositories import admin_users as admin_repo
 from app.repositories import appointments as appointments_repo
 from app.repositories import questions as questions_repo
+from app.clients.vk_client import VKAPIError
+from app.repositories import reviews as reviews_repo
 from app.repositories import service_requests as service_requests_repo
 from app.schemas.admin import (
     AdminCreateRequest,
@@ -26,7 +30,14 @@ from app.schemas.admin import (
     AppointmentListItem,
 )
 from app.schemas.question import QuestionListItem
+from app.schemas.review import (
+    ReviewCreate,
+    ReviewListItem,
+    ReviewSyncResponse,
+    ReviewUpdate,
+)
 from app.schemas.service_request import ServiceRequestListItem
+from app.services import reviews as reviews_service
 
 router = APIRouter()
 
@@ -127,6 +138,90 @@ async def admin_delete_all_requests(
         "service_requests": deleted_service_requests,
         "questions": deleted_questions,
     }
+
+
+def _get_http_client(request: Request) -> httpx.AsyncClient:
+    return request.app.state.http_client
+
+
+@router.get("/reviews", response_model=list[ReviewListItem])
+async def admin_list_reviews(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[ReviewListItem]:
+    rows = await reviews_repo.list_all(session, skip=skip, limit=limit)
+    return [ReviewListItem.model_validate(r) for r in rows]
+
+
+@router.post("/reviews", response_model=ReviewListItem, status_code=status.HTTP_201_CREATED)
+async def admin_create_review(
+    body: ReviewCreate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ReviewListItem:
+    row = await reviews_repo.create_one(
+        session,
+        text=body.text,
+        author_name=body.author_name,
+        author_photo_url=body.author_photo_url,
+        position=body.position,
+        is_visible=body.is_visible,
+    )
+    return ReviewListItem.model_validate(row)
+
+
+@router.patch("/reviews/{review_id}", response_model=ReviewListItem)
+async def admin_update_review(
+    review_id: uuid.UUID,
+    body: ReviewUpdate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ReviewListItem:
+    raw = body.model_dump(exclude_unset=True)
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нет полей для обновления")
+    row = await reviews_repo.update_one(session, review_id, raw)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Отзыв не найден")
+    return ReviewListItem.model_validate(row)
+
+
+@router.delete("/reviews/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_review(
+    review_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await reviews_repo.delete_one(session, review_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Отзыв не найден")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/reviews/sync", response_model=ReviewSyncResponse)
+async def admin_sync_reviews(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    http_client: Annotated[httpx.AsyncClient, Depends(_get_http_client)],
+) -> ReviewSyncResponse:
+    """Стянуть новые комментарии из VK обсуждения. Существующие записи не трогаются."""
+    try:
+        return await reviews_service.sync_reviews_from_vk(session, http_client, settings)
+    except VKAPIError as exc:
+        if exc.error_code == 27:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "VK не разрешает board.getComments с group-токеном. "
+                    "Задайте VK_READ_TOKEN: сервисный ключ приложения VK или user access token."
+                ),
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"VK API error {exc.error_code}: {exc.error_msg}",
+        ) from exc
 
 
 @router.get("/admins", response_model=list[AdminListItem])

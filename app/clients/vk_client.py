@@ -14,6 +14,11 @@ from app.core.config import Settings
 logger = logging.getLogger(__name__)
 
 VK_METHOD_URL = "https://api.vk.com/method/messages.send"
+VK_BOARD_GET_COMMENTS_URL = "https://api.vk.com/method/board.getComments"
+
+# board.getComments отдаёт максимум 100 за раз.
+_VK_BOARD_PAGE_SIZE = 100
+_VK_BOARD_MAX_PAGES = 50  # 5000 комментариев — более чем достаточно
 
 # VK error codes that are often transient; safe to retry briefly.
 _RETRY_VK_ERROR_CODES: frozenset[int] = frozenset({6, 10})
@@ -178,6 +183,135 @@ class VKClient:
         """Отправить уведомление о вопросе с формы (те же получатели, что и для заявок)."""
         text = self._build_question_message(full_name=full_name, phone=phone)
         await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
+
+    async def fetch_topic_comments(
+        self,
+        *,
+        group_id: int,
+        topic_id: int,
+    ) -> list[dict[str, Any]]:
+        """Стянуть все комментарии обсуждения с автором (имя + фото).
+
+        Возвращает список словарей вида:
+            {"comment_id": int, "text": str, "author_name": str, "author_photo_url": str | None}
+        Комментарии от групп (from_id < 0) пропускаются.
+        """
+        items: list[dict[str, Any]] = []
+        profiles_by_id: dict[int, dict[str, Any]] = {}
+
+        offset = 0
+        for _ in range(_VK_BOARD_MAX_PAGES):
+            page = await self._board_get_comments_page(
+                group_id=group_id,
+                topic_id=topic_id,
+                offset=offset,
+                count=_VK_BOARD_PAGE_SIZE,
+            )
+            page_items = page.get("items") or []
+            for prof in page.get("profiles") or []:
+                pid = prof.get("id")
+                if isinstance(pid, int):
+                    profiles_by_id[pid] = prof
+            if not page_items:
+                break
+            items.extend(page_items)
+            if len(page_items) < _VK_BOARD_PAGE_SIZE:
+                break
+            offset += _VK_BOARD_PAGE_SIZE
+
+        out: list[dict[str, Any]] = []
+        for it in items:
+            cid = it.get("id")
+            from_id = it.get("from_id")
+            text = (it.get("text") or "").strip()
+            if not isinstance(cid, int) or not isinstance(from_id, int):
+                continue
+            if from_id <= 0:
+                # комментарий от имени группы — для отзывов не годится
+                continue
+            prof = profiles_by_id.get(from_id) or {}
+            first = (prof.get("first_name") or "").strip()
+            last = (prof.get("last_name") or "").strip()
+            full_name = " ".join(p for p in (first, last) if p) or "Гость"
+            photo = (
+                prof.get("photo_max_orig")
+                or prof.get("photo_max")
+                or prof.get("photo_400_orig")
+                or prof.get("photo_200")
+                or prof.get("photo_100")
+            )
+            out.append(
+                {
+                    "comment_id": cid,
+                    "text": text,
+                    "author_name": full_name,
+                    "author_photo_url": photo if isinstance(photo, str) and photo else None,
+                },
+            )
+        return out
+
+    async def _board_get_comments_page(
+        self,
+        *,
+        group_id: int,
+        topic_id: int,
+        offset: int,
+        count: int,
+    ) -> dict[str, Any]:
+        # board.getComments требует user- или сервисный токен; group-токен даёт VK error 27.
+        read_token = self._settings.vk_read_token or self._settings.vk_token
+        params: dict[str, Any] = {
+            "access_token": read_token,
+            "v": self._settings.vk_api_version,
+            "group_id": group_id,
+            "topic_id": topic_id,
+            "offset": offset,
+            "count": count,
+            "need_likes": 0,
+            "extended": 1,
+            "sort": "asc",
+            "lang": "ru",
+            "fields": "photo_200,photo_max,photo_max_orig,photo_400_orig",
+        }
+        attempts = self._settings.vk_retry_attempts
+        backoff = self._settings.vk_retry_backoff_seconds
+
+        for attempt in range(1, attempts + 1):
+            try:
+                response = await self._http.get(VK_BOARD_GET_COMMENTS_URL, params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if "error" in payload:
+                    err = payload["error"]
+                    code = int(err.get("error_code", 0))
+                    msg = str(err.get("error_msg", "unknown"))
+                    if code in _RETRY_VK_ERROR_CODES and attempt < attempts:
+                        await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+                        continue
+                    raise VKAPIError(code, msg)
+                resp = payload.get("response")
+                if not isinstance(resp, dict):
+                    raise VKAPIError(0, "unexpected VK response shape")
+                return resp
+            except (httpx.TimeoutException, httpx.TransportError):
+                if attempt >= attempts:
+                    logger.exception(
+                        "VK board.getComments transport error",
+                        extra={"attempt": attempt, "topic_id": topic_id},
+                    )
+                    raise
+                await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code < 500 or attempt >= attempts:
+                    logger.warning(
+                        "VK board.getComments HTTP error",
+                        extra={"status_code": status_code, "attempt": attempt},
+                    )
+                    raise
+                await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+
+        raise RuntimeError("VKClient._board_get_comments_page: retry loop exited unexpectedly")
 
     async def notify_new_service_request(
         self,

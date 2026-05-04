@@ -58,6 +58,7 @@ function setTab(name) {
   if (name === "appointments") loadAppointments();
   if (name === "services") loadServiceRequests();
   if (name === "questions") loadQuestions();
+  if (name === "reviews") loadReviews();
   if (name === "profile") loadMe();
   if (name === "users") loadAdmins();
 }
@@ -237,6 +238,72 @@ async function loadAdmins() {
     tr.appendChild(tdAct);
     rows.appendChild(tr);
   }
+}
+
+async function loadReviews() {
+  $("reviewsError").textContent = "";
+  show($("reviewsError"), false);
+  const rows = $("reviewRows");
+  rows.innerHTML = "";
+  const data = await apiFetch("/reviews?limit=500");
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="7" class="muted">Пока нет отзывов</td></tr>`;
+    return;
+  }
+  for (const r of data) {
+    const tr = document.createElement("tr");
+    const photoCell = r.author_photo_url
+      ? `<img src="${escapeHtml(r.author_photo_url)}" alt="" class="review-avatar" />`
+      : '<span class="muted">—</span>';
+    const preview = r.text.length > 200 ? r.text.slice(0, 200) + "…" : r.text;
+    tr.innerHTML = `
+      <td data-label="Фото">${photoCell}</td>
+      <td data-label="Автор">${escapeHtml(r.author_name)}</td>
+      <td data-label="Текст" class="review-text">${escapeHtml(preview)}</td>
+      <td data-label="Поз.">${escapeHtml(String(r.position))}</td>
+      <td data-label="Видим">${r.is_visible ? "да" : "нет"}</td>
+      <td data-label="VK id">${r.vk_comment_id != null ? escapeHtml(String(r.vk_comment_id)) : "—"}</td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn";
+    editBtn.textContent = "Изменить";
+    editBtn.addEventListener("click", () => openReviewEditModal(r));
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(document.createTextNode(" "));
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: "Удалить этот отзыв?",
+          request: () => apiFetch(`/reviews/${r.id}`, { method: "DELETE" }),
+          onDone: loadReviews,
+          errorTargetId: "reviewsError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+function openReviewEditModal(r) {
+  $("reUserId").value = r.id;
+  $("reAuthor").value = r.author_name;
+  $("rePhoto").value = r.author_photo_url || "";
+  $("reText").value = r.text;
+  $("rePosition").value = String(r.position);
+  $("reVisible").checked = !!r.is_visible;
+  $("reviewEditMsg").textContent = "";
+  show($("reviewEditMsg"), false);
+  show($("reviewEditModal"), true);
+  $("reviewEditModal").setAttribute("aria-hidden", "false");
+}
+
+function closeReviewEditModal() {
+  show($("reviewEditModal"), false);
+  $("reviewEditModal").setAttribute("aria-hidden", "true");
 }
 
 function openEditModal(u) {
@@ -425,6 +492,107 @@ $("adminForm").addEventListener("submit", async (e) => {
     show(msg, true);
     e.target.reset();
     await loadAdmins();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
+$("refreshReviewsBtn").addEventListener("click", async () => {
+  try {
+    await loadReviews();
+  } catch (err) {
+    $("reviewsError").textContent = err.message;
+    show($("reviewsError"), true);
+  }
+});
+
+$("syncReviewsBtn").addEventListener("click", async () => {
+  const msg = $("reviewsSyncMsg");
+  msg.textContent = "";
+  show(msg, false);
+  $("syncReviewsBtn").disabled = true;
+  try {
+    const res = await apiFetch("/reviews/sync", { method: "POST" });
+    msg.textContent = `Получено из VK: ${res.fetched}, добавлено новых: ${res.created}, уже было: ${res.skipped_existing}, пустых пропущено: ${res.skipped_empty}.`;
+    show(msg, true);
+    await loadReviews();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  } finally {
+    $("syncReviewsBtn").disabled = false;
+  }
+});
+
+$("reviewCreateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("reviewCreateMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const author_name = String($("rcAuthor").value || "").trim();
+  const text = String($("rcText").value || "").trim();
+  const photo = String($("rcPhoto").value || "").trim();
+  const positionRaw = String($("rcPosition").value || "0").trim();
+  const position = Number.parseInt(positionRaw, 10);
+  if (!author_name || !text) {
+    msg.textContent = "Заполните автора и текст.";
+    show(msg, true);
+    return;
+  }
+  const payload = {
+    author_name,
+    text,
+    author_photo_url: photo || null,
+    position: Number.isFinite(position) && position >= 0 ? position : 0,
+    is_visible: $("rcVisible").checked,
+  };
+  try {
+    await apiFetch("/reviews", { method: "POST", body: JSON.stringify(payload) });
+    msg.textContent = "Отзыв добавлен.";
+    show(msg, true);
+    e.target.reset();
+    $("rcVisible").checked = true;
+    $("rcPosition").value = "0";
+    await loadReviews();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
+$("reviewEditCancelBtn").addEventListener("click", closeReviewEditModal);
+$("reviewEditModal").addEventListener("click", (e) => {
+  if (e.target === $("reviewEditModal")) closeReviewEditModal();
+});
+
+$("reviewEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = $("reUserId").value;
+  const msg = $("reviewEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const author_name = String($("reAuthor").value || "").trim();
+  const text = String($("reText").value || "").trim();
+  const photo = String($("rePhoto").value || "").trim();
+  const positionRaw = String($("rePosition").value || "0").trim();
+  const position = Number.parseInt(positionRaw, 10);
+  if (!author_name || !text) {
+    msg.textContent = "Заполните автора и текст.";
+    show(msg, true);
+    return;
+  }
+  const payload = {
+    author_name,
+    text,
+    author_photo_url: photo || null,
+    position: Number.isFinite(position) && position >= 0 ? position : 0,
+    is_visible: $("reVisible").checked,
+  };
+  try {
+    await apiFetch(`/reviews/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    closeReviewEditModal();
+    await loadReviews();
   } catch (err) {
     msg.textContent = err.message;
     show(msg, true);
