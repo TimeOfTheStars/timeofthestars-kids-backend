@@ -24,6 +24,14 @@ class Settings(BaseSettings):
         description="Async SQLAlchemy URL, e.g. postgresql+asyncpg://user:pass@host:5432/db",
     )
     vk_token: str = Field(..., alias="VK_TOKEN", min_length=1)
+    vk_read_token: str | None = Field(
+        default=None,
+        alias="VK_READ_TOKEN",
+        description=(
+            "Сервисный или user-токен для чтения публичных данных (board.getComments). "
+            "Group-токен не подходит (ошибка VK 27). Если пусто — пробуем VK_TOKEN."
+        ),
+    )
 
     vk_api_version: str = Field(default="5.199", alias="VK_API_VERSION")
     http_timeout_seconds: float = Field(default=15.0, alias="HTTP_TIMEOUT_SECONDS")
@@ -32,6 +40,18 @@ class Settings(BaseSettings):
         default=0.5,
         ge=0.1,
         alias="VK_RETRY_BACKOFF_SECONDS",
+    )
+    vk_reviews_group_id: int = Field(
+        default=125696800,
+        ge=1,
+        alias="VK_REVIEWS_GROUP_ID",
+        description="ID сообщества VK, в котором лежит обсуждение с отзывами",
+    )
+    vk_reviews_topic_id: int = Field(
+        default=56616420,
+        ge=1,
+        alias="VK_REVIEWS_TOPIC_ID",
+        description="ID обсуждения (topic) с отзывами",
     )
     sqlalchemy_echo: bool = Field(default=False, alias="SQLALCHEMY_ECHO")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

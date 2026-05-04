@@ -215,6 +215,29 @@ input {
   margin: 0;
 }
 
+.review-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.review-text {
+  white-space: pre-wrap;
+  max-width: 540px;
+}
+
+textarea {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  resize: vertical;
+}
+
 .top-actions {
   align-items: flex-start;
 }

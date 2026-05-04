@@ -35,6 +35,7 @@
             <button type="button" class="nav-tab active" data-tab="appointments">Заявки</button>
             <button type="button" class="nav-tab" data-tab="services">Услуги</button>
             <button type="button" class="nav-tab" data-tab="questions">Вопросы</button>
+            <button type="button" class="nav-tab" data-tab="reviews">Отзывы</button>
             <button type="button" class="nav-tab" data-tab="profile">Профиль</button>
             <button type="button" class="nav-tab nav-tab-admin-only hidden" data-tab="users">Пользователи</button>
           </nav>
@@ -127,6 +128,54 @@
             </div>
           </div>
 
+          <div id="tab-reviews" class="tab-panel hidden">
+            <div class="card">
+              <div class="row space-between">
+                <h1>Отзывы</h1>
+                <div class="row gap">
+                  <button type="button" id="syncReviewsBtn" class="btn primary">Синхронизировать с VK</button>
+                  <button type="button" id="refreshReviewsBtn" class="btn">Обновить</button>
+                </div>
+              </div>
+              <p class="muted">Источник: обсуждение VK. Новые комментарии добавляются, существующие записи не перезаписываются.</p>
+              <p id="reviewsSyncMsg" class="msg hidden"></p>
+              <p id="reviewsError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Фото</th>
+                      <th>Автор</th>
+                      <th>Текст</th>
+                      <th>Поз.</th>
+                      <th>Видим</th>
+                      <th>VK id</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="reviewRows"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Добавить отзыв вручную</h2>
+              <form id="reviewCreateForm" class="form form-wide">
+                <label>Автор <input id="rcAuthor" required maxlength="255" /></label>
+                <label>Ссылка на фото <input id="rcPhoto" type="url" maxlength="1024" placeholder="https://..." /></label>
+                <label>Текст
+                  <textarea id="rcText" required minlength="1" maxlength="8000" rows="4"></textarea>
+                </label>
+                <label>Позиция (для сортировки)
+                  <input id="rcPosition" type="number" min="0" max="10000" value="0" />
+                </label>
+                <label class="checkbox-row"><input type="checkbox" id="rcVisible" checked /> Видим на сайте</label>
+                <button type="submit" class="btn primary">Создать</button>
+                <p id="reviewCreateMsg" class="msg hidden"></p>
+              </form>
+            </div>
+          </div>
+
           <div id="tab-profile" class="tab-panel hidden">
             <div class="card">
               <h1>Профиль</h1>
@@ -208,6 +257,29 @@
             <button type="button" id="editCancelBtn" class="btn">Отмена</button>
           </div>
           <p id="editMsg" class="msg hidden"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="reviewEditModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card">
+        <h2>Редактировать отзыв</h2>
+        <form id="reviewEditForm" class="form form-wide">
+          <input type="hidden" id="reUserId" />
+          <label>Автор <input id="reAuthor" required maxlength="255" /></label>
+          <label>Ссылка на фото <input id="rePhoto" type="url" maxlength="1024" placeholder="https://..." /></label>
+          <label>Текст
+            <textarea id="reText" required minlength="1" maxlength="8000" rows="6"></textarea>
+          </label>
+          <label>Позиция
+            <input id="rePosition" type="number" min="0" max="10000" />
+          </label>
+          <label class="checkbox-row"><input type="checkbox" id="reVisible" /> Видим на сайте</label>
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="reviewEditCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="reviewEditMsg" class="msg hidden"></p>
         </form>
       </div>
     </div>

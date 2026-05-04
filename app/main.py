@@ -16,6 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.admin import router as admin_router
 from app.api.appointments import router as appointments_router
 from app.api.questions import router as questions_router
+from app.api.reviews import router as reviews_router
 from app.api.service_requests import router as service_requests_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -79,6 +80,7 @@ async def root() -> dict[str, str]:
         "appointments": "POST /appointments",
         "service_requests": "POST /service-requests",
         "questions": "POST /questions",
+        "reviews": "GET /reviews",
         "admin_api": "/api/admin",
     }
 
@@ -92,6 +94,7 @@ async def health() -> dict[str, str]:
 app.include_router(appointments_router)
 app.include_router(service_requests_router)
 app.include_router(questions_router)
+app.include_router(reviews_router)
 app.include_router(admin_router, prefix="/api/admin")
 
 if _admin_static.is_dir():
