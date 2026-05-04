@@ -36,6 +36,7 @@
             <button type="button" class="nav-tab" data-tab="services">Услуги</button>
             <button type="button" class="nav-tab" data-tab="questions">Вопросы</button>
             <button type="button" class="nav-tab" data-tab="reviews">Отзывы</button>
+            <button type="button" class="nav-tab" data-tab="news">Новости</button>
             <button type="button" class="nav-tab" data-tab="profile">Профиль</button>
             <button type="button" class="nav-tab nav-tab-admin-only hidden" data-tab="users">Пользователи</button>
           </nav>
@@ -176,6 +177,47 @@
             </div>
           </div>
 
+          <div id="tab-news" class="tab-panel hidden">
+            <div class="card">
+              <h1>Новости</h1>
+              <p class="muted">Вставьте ссылку на пост VK (любого вида: <code>https://vk.ru/wall-…_…</code> или со страницы группы) — бэк сам подтянет текст и фото.</p>
+              <form id="newsCreateForm" class="form form-wide">
+                <label>Ссылка на пост VK
+                  <input id="ncUrl" type="url" required placeholder="https://vk.ru/wall-125696800_1317" />
+                </label>
+                <label>Позиция
+                  <input id="ncPosition" type="number" min="0" max="10000" value="0" />
+                </label>
+                <label class="checkbox-row"><input type="checkbox" id="ncVisible" checked /> Видим на сайте</label>
+                <button type="submit" class="btn primary">Импортировать</button>
+                <p id="newsCreateMsg" class="msg hidden"></p>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="row space-between">
+                <h2>Список новостей</h2>
+                <button type="button" id="refreshNewsBtn" class="btn">Обновить</button>
+              </div>
+              <p id="newsError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Картинка</th>
+                      <th>Текст</th>
+                      <th>Поз.</th>
+                      <th>Видим</th>
+                      <th>Ссылка</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="newsRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <div id="tab-profile" class="tab-panel hidden">
             <div class="card">
               <h1>Профиль</h1>
@@ -280,6 +322,30 @@
             <button type="button" id="reviewEditCancelBtn" class="btn">Отмена</button>
           </div>
           <p id="reviewEditMsg" class="msg hidden"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="newsEditModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card">
+        <h2>Редактировать новость</h2>
+        <form id="newsEditForm" class="form form-wide">
+          <input type="hidden" id="neId" />
+          <label>Ссылка на VK <input id="neUrl" type="url" required maxlength="512" /></label>
+          <label>Картинка (URL) <input id="neImage" type="url" maxlength="1024" placeholder="https://..." /></label>
+          <label>Текст
+            <textarea id="neExcerpt" rows="8" maxlength="20000"></textarea>
+          </label>
+          <label>Позиция
+            <input id="nePosition" type="number" min="0" max="10000" />
+          </label>
+          <label class="checkbox-row"><input type="checkbox" id="neVisible" /> Видим на сайте</label>
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="neRefreshBtn" class="btn">Обновить из VK</button>
+            <button type="button" id="newsEditCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="newsEditMsg" class="msg hidden"></p>
         </form>
       </div>
     </div>
