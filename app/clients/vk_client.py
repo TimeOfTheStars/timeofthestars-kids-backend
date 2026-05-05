@@ -52,18 +52,18 @@ class VKClient:
         child_age: int,
     ) -> str:
         return (
-            "Новая запись:\n"
-            f"Телефон: {phone}\n"
-            f"ФИО родителя: {parent_name}\n"
-            f"ФИО ребёнка: {child_name}\n"
-            f"Возраст: {child_age}"
+            "📩 Новая запись:\n"
+            f"📞 Телефон: {phone}\n"
+            f"🧑‍🧒 ФИО родителя: {parent_name}\n"
+            f"🧒 ФИО ребёнка: {child_name}\n"
+            f"🗓️ Возраст: {child_age}"
         )
 
     def _build_question_message(self, *, full_name: str, phone: str) -> str:
         return (
-            "Новый вопрос:\n"
-            f"ФИО: {full_name}\n"
-            f"Телефон: {phone}"
+            "❓ Новый вопрос:\n"
+            f"👤 ФИО: {full_name}\n"
+            f"📞 Телефон: {phone}"
         )
 
     def _build_service_request_message(
@@ -76,12 +76,12 @@ class VKClient:
         service: str,
     ) -> str:
         return (
-            "Новая заявка на услугу:\n"
-            f"Услуга: {service}\n"
-            f"Телефон: {phone}\n"
-            f"ФИО родителя: {parent_name}\n"
-            f"ФИО ребёнка: {child_name}\n"
-            f"Возраст: {child_age}"
+            "📋 Новая заявка на услугу:\n"
+            f"🧾 Услуга: {service}\n"
+            f"📞 Телефон: {phone}\n"
+            f"🧑‍🧒 ФИО родителя: {parent_name}\n"
+            f"🧒 ФИО ребёнка: {child_name}\n"
+            f"🗓️ Возраст: {child_age}"
         )
 
     async def _notify_recipients(self, *, message: str, recipient_user_ids: list[int]) -> None:
