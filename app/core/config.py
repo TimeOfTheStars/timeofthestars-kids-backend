@@ -56,6 +56,26 @@ class Settings(BaseSettings):
     sqlalchemy_echo: bool = Field(default=False, alias="SQLALCHEMY_ECHO")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
+    public_base_url: str | None = Field(
+        default=None,
+        alias="PUBLIC_BASE_URL",
+        description=(
+            "Базовый URL бэкенда (например https://api.timeofthestars-kids.ru). "
+            "Если задан — относительные ссылки на /static/... в публичных ответах "
+            "превращаются в абсолютные."
+        ),
+    )
+
+    @field_validator("public_base_url")
+    @classmethod
+    def _strip_trailing_slash(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        return v.rstrip("/")
+
     jwt_secret: str = Field(..., alias="JWT_SECRET", min_length=32)
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=1440, ge=5, le=60 * 24 * 30, alias="JWT_EXPIRE_MINUTES")

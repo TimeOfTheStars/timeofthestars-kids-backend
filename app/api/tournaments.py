@@ -6,6 +6,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings, get_settings
+from app.core.urls import absolutize
 from app.db.session import get_db_session
 from app.models.tournament import Tournament
 from app.repositories import tournaments as tournaments_repo
@@ -21,7 +23,7 @@ def _derive_season(start: date) -> str:
     return f"{start.year - 1}/{start.year}"
 
 
-def _to_public(row: Tournament) -> TournamentPublic:
+def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
     season = row.season or _derive_season(row.start_date)
     return TournamentPublic(
         id=str(row.id),
@@ -35,7 +37,7 @@ def _to_public(row: Tournament) -> TournamentPublic:
         season=season,
         description=row.description,
         url=row.url,
-        teams=[TeamPublic(name=t.name, logo=t.logo) for t in row.teams],
+        teams=[TeamPublic(name=t.name, logo=absolutize(t.logo, base)) for t in row.teams],
     )
 
 
@@ -46,9 +48,11 @@ def _to_public(row: Tournament) -> TournamentPublic:
 )
 async def list_tournaments(
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
     response: Response,
 ) -> list[TournamentPublic]:
     """Голый массив турниров с camelCase-полями (см. tournaments-api.md, вариант A)."""
     rows = await tournaments_repo.list_visible(session)
     response.headers["Cache-Control"] = "public, max-age=300"
-    return [_to_public(r) for r in rows]
+    base = settings.public_base_url
+    return [_to_public(r, base) for r in rows]
