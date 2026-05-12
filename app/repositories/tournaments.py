@@ -69,13 +69,18 @@ async def create_one(
     fields: dict[str, Any],
     team_ids: list[uuid.UUID],
 ) -> Tournament:
-    row = Tournament(**fields)
+    # Связи проставляем сразу в конструкторе — иначе обращение к row.team_links
+    # на свежесозданном объекте триггерит ленивую загрузку, что в async-сессии
+    # роняет greenlet.
+    row = Tournament(
+        **fields,
+        team_links=[
+            TournamentTeam(team_id=tid, position=pos)
+            for pos, tid in enumerate(team_ids)
+        ],
+    )
     session.add(row)
-    if team_ids:
-        await session.flush()
-        _replace_team_links(row, team_ids)
     await session.commit()
-    # перечитываем со связями
     fresh = await get_by_id(session, row.id)
     assert fresh is not None
     return fresh
