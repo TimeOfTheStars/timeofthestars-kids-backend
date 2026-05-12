@@ -22,6 +22,8 @@ from app.repositories import news_posts as news_repo
 from app.repositories import questions as questions_repo
 from app.repositories import reviews as reviews_repo
 from app.repositories import service_requests as service_requests_repo
+from app.repositories import teams as teams_repo
+from app.repositories import tournaments as tournaments_repo
 from app.schemas.admin import (
     AdminCreateRequest,
     AdminListItem,
@@ -39,6 +41,14 @@ from app.schemas.review import (
     ReviewUpdate,
 )
 from app.schemas.service_request import ServiceRequestListItem
+from app.schemas.tournament import (
+    TeamCreate,
+    TeamListItem,
+    TeamUpdate,
+    TournamentCreate,
+    TournamentListItem,
+    TournamentUpdate,
+)
 from app.services import news_posts as news_service
 from app.services import reviews as reviews_service
 from app.services.news_posts import NewsPostError
@@ -326,6 +336,158 @@ async def admin_delete_news(
 ) -> Response:
     if not await news_repo.delete_one(session, news_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Новость не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/teams", response_model=list[TeamListItem])
+async def admin_list_teams(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[TeamListItem]:
+    rows = await teams_repo.list_all(session, skip=skip, limit=limit)
+    return [TeamListItem.model_validate(r) for r in rows]
+
+
+@router.post("/teams", response_model=TeamListItem, status_code=status.HTTP_201_CREATED)
+async def admin_create_team(
+    body: TeamCreate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TeamListItem:
+    row = await teams_repo.create_one(session, name=body.name, logo=body.logo)
+    return TeamListItem.model_validate(row)
+
+
+@router.patch("/teams/{team_id}", response_model=TeamListItem)
+async def admin_update_team(
+    team_id: uuid.UUID,
+    body: TeamUpdate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TeamListItem:
+    raw = body.model_dump(exclude_unset=True)
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нет полей для обновления")
+    row = await teams_repo.update_one(session, team_id, raw)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Команда не найдена")
+    return TeamListItem.model_validate(row)
+
+
+@router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_team(
+    team_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await teams_repo.delete_one(session, team_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Команда не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _validate_team_ids(
+    session: AsyncSession,
+    team_ids: list[uuid.UUID],
+) -> list[uuid.UUID]:
+    """Все ли id существуют. Возвращает team_ids в исходном порядке без дублей."""
+    if not team_ids:
+        return []
+    seen: set[uuid.UUID] = set()
+    deduped: list[uuid.UUID] = []
+    for tid in team_ids:
+        if tid in seen:
+            continue
+        seen.add(tid)
+        deduped.append(tid)
+    found = await teams_repo.get_by_ids(session, deduped)
+    found_ids = {t.id for t in found}
+    missing = [str(tid) for tid in deduped if tid not in found_ids]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Не найдены команды: {', '.join(missing)}",
+        )
+    return deduped
+
+
+@router.get("/tournaments", response_model=list[TournamentListItem])
+async def admin_list_tournaments(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> list[TournamentListItem]:
+    rows = await tournaments_repo.list_all(session, skip=skip, limit=limit)
+    return [TournamentListItem.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/tournaments",
+    response_model=TournamentListItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def admin_create_tournament(
+    body: TournamentCreate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TournamentListItem:
+    if body.end_date < body.start_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_date раньше start_date",
+        )
+    team_ids = await _validate_team_ids(session, body.team_ids)
+    fields = body.model_dump(exclude={"team_ids"})
+    row = await tournaments_repo.create_one(session, fields=fields, team_ids=team_ids)
+    return TournamentListItem.model_validate(row)
+
+
+@router.patch("/tournaments/{tournament_id}", response_model=TournamentListItem)
+async def admin_update_tournament(
+    tournament_id: uuid.UUID,
+    body: TournamentUpdate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TournamentListItem:
+    raw = body.model_dump(exclude_unset=True)
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нет полей для обновления")
+    team_ids = raw.pop("team_ids", None)
+    if team_ids is not None:
+        team_ids = await _validate_team_ids(session, team_ids)
+    # Проверка start_date/end_date с учётом текущих значений
+    if "start_date" in raw or "end_date" in raw:
+        existing = await tournaments_repo.get_by_id(session, tournament_id)
+        if existing is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Турнир не найден")
+        new_start = raw.get("start_date", existing.start_date)
+        new_end = raw.get("end_date", existing.end_date)
+        if new_end < new_start:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="end_date раньше start_date",
+            )
+    row = await tournaments_repo.update_one(
+        session,
+        tournament_id,
+        fields=raw,
+        team_ids=team_ids,
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Турнир не найден")
+    return TournamentListItem.model_validate(row)
+
+
+@router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_tournament(
+    tournament_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await tournaments_repo.delete_one(session, tournament_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Турнир не найден")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

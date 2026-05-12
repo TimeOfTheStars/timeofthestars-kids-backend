@@ -236,6 +236,82 @@ input {
   display: block;
 }
 
+.upload-row {
+  align-items: stretch;
+}
+
+.upload-row .grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.team-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--border);
+  display: block;
+}
+
+.tournament-modal {
+  max-width: 640px;
+}
+
+.fields-row {
+  align-items: stretch;
+}
+
+.fields-row .grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.team-picker {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
+  margin: 0;
+}
+
+.team-picker legend {
+  padding: 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.team-list {
+  list-style: decimal inside;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.team-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: var(--sidebar);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+}
+
+.team-list .team-list-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+select {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+}
+
 textarea {
   padding: 0.55rem 0.65rem;
   border-radius: 8px;

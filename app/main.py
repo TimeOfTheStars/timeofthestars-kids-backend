@@ -19,6 +19,7 @@ from app.api.news_posts import router as news_router
 from app.api.questions import router as questions_router
 from app.api.reviews import router as reviews_router
 from app.api.service_requests import router as service_requests_router
+from app.api.tournaments import router as tournaments_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.session import AsyncSessionLocal
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _project_root = Path(__file__).resolve().parents[1]
 _admin_static = _project_root / "static" / "admin"
+_static_root = _project_root / "static"
 
 
 @asynccontextmanager
@@ -83,6 +85,7 @@ async def root() -> dict[str, str]:
         "questions": "POST /questions",
         "reviews": "GET /reviews",
         "news": "GET /news",
+        "tournaments": "GET /tournaments",
         "admin_api": "/api/admin",
     }
 
@@ -98,7 +101,12 @@ app.include_router(service_requests_router)
 app.include_router(questions_router)
 app.include_router(reviews_router)
 app.include_router(news_router)
+app.include_router(tournaments_router)
 app.include_router(admin_router, prefix="/api/admin")
 
 if _admin_static.is_dir():
     app.mount("/admin", StaticFiles(directory=str(_admin_static), html=True), name="admin_ui")
+
+# Загрузки (логотипы команд и т.п.) лежат в static/<subdir>/...
+_static_root.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_static_root)), name="static")

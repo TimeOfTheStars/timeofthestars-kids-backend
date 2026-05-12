@@ -37,6 +37,8 @@
             <button type="button" class="nav-tab" data-tab="questions">Вопросы</button>
             <button type="button" class="nav-tab" data-tab="reviews">Отзывы</button>
             <button type="button" class="nav-tab" data-tab="news">Новости</button>
+            <button type="button" class="nav-tab" data-tab="teams">Команды</button>
+            <button type="button" class="nav-tab" data-tab="tournaments">Турниры</button>
             <button type="button" class="nav-tab" data-tab="profile">Профиль</button>
             <button type="button" class="nav-tab nav-tab-admin-only hidden" data-tab="users">Пользователи</button>
           </nav>
@@ -218,6 +220,75 @@
             </div>
           </div>
 
+          <div id="tab-teams" class="tab-panel hidden">
+            <div class="card">
+              <h1>Команды</h1>
+              <form id="teamCreateForm" class="form form-wide">
+                <label>Название <input id="tcName" required maxlength="255" /></label>
+                <label>Логотип
+                  <div class="row gap upload-row">
+                    <input id="tcLogo" class="grow" type="text" maxlength="1024" placeholder="/static/teams/… или https://…" />
+                    <button type="button" id="tcLogoUploadBtn" class="btn">Загрузить файл</button>
+                    <input id="tcLogoFile" type="file" accept="image/*" hidden />
+                  </div>
+                </label>
+                <p id="tcLogoMsg" class="msg muted hidden"></p>
+                <button type="submit" class="btn primary">Добавить команду</button>
+                <p id="teamCreateMsg" class="msg hidden"></p>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="row space-between">
+                <h2>Список команд</h2>
+                <button type="button" id="refreshTeamsBtn" class="btn">Обновить</button>
+              </div>
+              <p id="teamsError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Лого</th>
+                      <th>Название</th>
+                      <th>URL логотипа</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="teamRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-tournaments" class="tab-panel hidden">
+            <div class="card">
+              <div class="row space-between">
+                <h1>Турниры</h1>
+                <div class="row gap">
+                  <button type="button" id="newTournamentBtn" class="btn primary">Новый турнир</button>
+                  <button type="button" id="refreshTournamentsBtn" class="btn">Обновить</button>
+                </div>
+              </div>
+              <p id="tournamentsError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Название</th>
+                      <th>Категория</th>
+                      <th>Даты</th>
+                      <th>Место</th>
+                      <th>Команд</th>
+                      <th>Видим</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tournamentRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <div id="tab-profile" class="tab-panel hidden">
             <div class="card">
               <h1>Профиль</h1>
@@ -346,6 +417,75 @@
             <button type="button" id="newsEditCancelBtn" class="btn">Отмена</button>
           </div>
           <p id="newsEditMsg" class="msg hidden"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="teamEditModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card">
+        <h2>Редактировать команду</h2>
+        <form id="teamEditForm" class="form form-wide">
+          <input type="hidden" id="teId" />
+          <label>Название <input id="teName" required maxlength="255" /></label>
+          <label>Логотип
+            <div class="row gap upload-row">
+              <input id="teLogo" class="grow" type="text" maxlength="1024" placeholder="/static/teams/… или https://…" />
+              <button type="button" id="teLogoUploadBtn" class="btn">Загрузить файл</button>
+              <input id="teLogoFile" type="file" accept="image/*" hidden />
+            </div>
+          </label>
+          <p id="teLogoMsg" class="msg muted hidden"></p>
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="teamEditCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="teamEditMsg" class="msg hidden"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="tournamentEditModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card tournament-modal">
+        <h2 id="tournamentEditTitle">Новый турнир</h2>
+        <form id="tournamentEditForm" class="form form-wide">
+          <input type="hidden" id="toId" />
+          <label>Название <input id="toTitle" required maxlength="512" /></label>
+          <div class="row gap fields-row">
+            <label class="grow">Возрастная категория <input id="toAge" required maxlength="32" placeholder="U10 / U12 …" /></label>
+            <label>Год рождения <input id="toBirthYear" type="text" maxlength="32" placeholder="например 2014 или 2018-2019" /></label>
+          </div>
+          <div class="row gap fields-row">
+            <label class="grow">Начало <input id="toStart" type="date" required /></label>
+            <label class="grow">Окончание <input id="toEnd" type="date" required /></label>
+          </div>
+          <label>Место проведения <input id="toLocation" required maxlength="512" /></label>
+          <div class="row gap fields-row">
+            <label class="grow">Город <input id="toCity" maxlength="255" /></label>
+            <label>Сезон <input id="toSeason" maxlength="16" placeholder="2025/2026" /></label>
+          </div>
+          <label>Описание
+            <textarea id="toDescription" rows="3" maxlength="4000"></textarea>
+          </label>
+          <label>Ссылка (положение/регистрация) <input id="toUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
+          <div class="row gap fields-row">
+            <label>Позиция <input id="toPosition" type="number" min="0" max="10000" value="0" /></label>
+            <label class="checkbox-row"><input type="checkbox" id="toVisible" checked /> Видим на сайте</label>
+          </div>
+
+          <fieldset class="team-picker">
+            <legend>Команды (порядок важен)</legend>
+            <div class="row gap">
+              <select id="toTeamSelect" class="grow"></select>
+              <button type="button" id="toAddTeamBtn" class="btn">Добавить</button>
+            </div>
+            <ol id="toTeamList" class="team-list"></ol>
+          </fieldset>
+
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="tournamentEditCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="tournamentEditMsg" class="msg hidden"></p>
         </form>
       </div>
     </div>

@@ -6,6 +6,8 @@ from app.models.news_post import NewsPost
 from app.models.question_request import QuestionRequest
 from app.models.review import Review
 from app.models.service_request import ServiceRequest
+from app.models.team import Team
+from app.models.tournament import Tournament, TournamentTeam
 
 __all__ = [
     "AdminUser",
@@ -14,4 +16,7 @@ __all__ = [
     "QuestionRequest",
     "Review",
     "ServiceRequest",
+    "Team",
+    "Tournament",
+    "TournamentTeam",
 ]

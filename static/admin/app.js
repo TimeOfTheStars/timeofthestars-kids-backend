@@ -19,7 +19,10 @@ function authHeaders() {
 
 async function apiFetch(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
-  if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  // FormData сам выставит Content-Type с boundary — не трогаем.
+  if (opts.body && typeof opts.body === "string" && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
   Object.assign(headers, authHeaders());
   const res = await fetch(`${API}${path}`, { ...opts, headers });
   const text = await res.text();
@@ -60,6 +63,8 @@ function setTab(name) {
   if (name === "questions") loadQuestions();
   if (name === "reviews") loadReviews();
   if (name === "news") loadNews();
+  if (name === "teams") loadTeams();
+  if (name === "tournaments") loadTournaments();
   if (name === "profile") loadMe();
   if (name === "users") loadAdmins();
 }
@@ -371,6 +376,264 @@ function openNewsEditModal(n) {
 function closeNewsEditModal() {
   show($("newsEditModal"), false);
   $("newsEditModal").setAttribute("aria-hidden", "true");
+}
+
+async function uploadTeamLogo(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const data = await apiFetch("/uploads/team-logo", { method: "POST", body: fd });
+  return data.url;
+}
+
+function bindLogoUpload({ urlInputId, fileInputId, buttonId, statusId }) {
+  const fileInput = $(fileInputId);
+  const urlInput = $(urlInputId);
+  const btn = $(buttonId);
+  const statusEl = statusId ? $(statusId) : null;
+  if (!fileInput || !urlInput || !btn) return;
+  btn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    if (statusEl) {
+      statusEl.textContent = "Загрузка…";
+      statusEl.classList.remove("hidden");
+    }
+    btn.disabled = true;
+    try {
+      const url = await uploadTeamLogo(file);
+      urlInput.value = url;
+      if (statusEl) statusEl.textContent = "Логотип загружен.";
+    } catch (err) {
+      if (statusEl) statusEl.textContent = "Ошибка загрузки: " + err.message;
+    } finally {
+      btn.disabled = false;
+      fileInput.value = "";
+    }
+  });
+}
+
+// ---------- Teams ----------
+
+window.__teamsCache = [];
+
+async function loadTeams() {
+  $("teamsError").textContent = "";
+  show($("teamsError"), false);
+  const rows = $("teamRows");
+  rows.innerHTML = "";
+  const data = await apiFetch("/teams?limit=500");
+  window.__teamsCache = data;
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="4" class="muted">Команд пока нет</td></tr>`;
+    return;
+  }
+  for (const t of data) {
+    const tr = document.createElement("tr");
+    const logoCell = t.logo
+      ? `<img src="${escapeHtml(t.logo)}" alt="" class="team-logo" />`
+      : '<span class="muted">—</span>';
+    tr.innerHTML = `
+      <td data-label="Лого">${logoCell}</td>
+      <td data-label="Название">${escapeHtml(t.name)}</td>
+      <td data-label="URL">${t.logo ? escapeHtml(t.logo) : '<span class="muted">—</span>'}</td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn";
+    editBtn.textContent = "Изменить";
+    editBtn.addEventListener("click", () => openTeamEditModal(t));
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(document.createTextNode(" "));
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: `Удалить команду «${t.name}»? Из турниров она тоже исчезнет.`,
+          request: () => apiFetch(`/teams/${t.id}`, { method: "DELETE" }),
+          onDone: async () => {
+            await loadTeams();
+            if (window.__activeTab === "tournaments") await loadTournaments();
+          },
+          errorTargetId: "teamsError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+function openTeamEditModal(t) {
+  $("teId").value = t.id;
+  $("teName").value = t.name;
+  $("teLogo").value = t.logo || "";
+  $("teamEditMsg").textContent = "";
+  show($("teamEditMsg"), false);
+  show($("teamEditModal"), true);
+  $("teamEditModal").setAttribute("aria-hidden", "false");
+}
+
+function closeTeamEditModal() {
+  show($("teamEditModal"), false);
+  $("teamEditModal").setAttribute("aria-hidden", "true");
+}
+
+// ---------- Tournaments ----------
+
+window.__editingTeamIds = []; // упорядоченный список id выбранных команд в модалке
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  return iso; // YYYY-MM-DD уже читаемо
+}
+
+async function loadTournaments() {
+  $("tournamentsError").textContent = "";
+  show($("tournamentsError"), false);
+  const rows = $("tournamentRows");
+  rows.innerHTML = "";
+  // Команды нужны для модалки — подтянем их параллельно
+  const [tournaments, teams] = await Promise.all([
+    apiFetch("/tournaments?limit=200"),
+    apiFetch("/teams?limit=500"),
+  ]);
+  window.__teamsCache = teams;
+  if (!tournaments.length) {
+    rows.innerHTML = `<tr><td colspan="7" class="muted">Турниров пока нет</td></tr>`;
+    return;
+  }
+  for (const t of tournaments) {
+    const tr = document.createElement("tr");
+    const dates = `${fmtDate(t.start_date)} — ${fmtDate(t.end_date)}`;
+    tr.innerHTML = `
+      <td data-label="Название">${escapeHtml(t.title)}</td>
+      <td data-label="Категория">${escapeHtml(t.age_category)}${t.birth_year ? ` · ${t.birth_year}` : ""}</td>
+      <td data-label="Даты">${escapeHtml(dates)}</td>
+      <td data-label="Место">${escapeHtml(t.location)}</td>
+      <td data-label="Команд">${(t.teams || []).length}</td>
+      <td data-label="Видим">${t.is_visible ? "да" : "нет"}</td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn";
+    editBtn.textContent = "Изменить";
+    editBtn.addEventListener("click", () => openTournamentEditModal(t));
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(document.createTextNode(" "));
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: `Удалить турнир «${t.title}»?`,
+          request: () => apiFetch(`/tournaments/${t.id}`, { method: "DELETE" }),
+          onDone: loadTournaments,
+          errorTargetId: "tournamentsError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+function renderTeamPicker() {
+  const sel = $("toTeamSelect");
+  sel.innerHTML = "";
+  const chosen = new Set(window.__editingTeamIds);
+  const available = (window.__teamsCache || []).filter((t) => !chosen.has(t.id));
+  if (!available.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(все команды уже добавлены)";
+    opt.disabled = true;
+    sel.appendChild(opt);
+  } else {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Выберите команду…";
+    sel.appendChild(placeholder);
+    for (const t of available) {
+      const opt = document.createElement("option");
+      opt.value = t.id;
+      opt.textContent = t.name;
+      sel.appendChild(opt);
+    }
+  }
+
+  const list = $("toTeamList");
+  list.innerHTML = "";
+  for (let i = 0; i < window.__editingTeamIds.length; i++) {
+    const tid = window.__editingTeamIds[i];
+    const team = (window.__teamsCache || []).find((x) => x.id === tid);
+    const li = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = team ? team.name : `(удалена) ${tid}`;
+    li.appendChild(label);
+    const actions = document.createElement("span");
+    actions.className = "team-list-actions";
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "btn btn-small";
+    up.textContent = "↑";
+    up.disabled = i === 0;
+    up.addEventListener("click", () => {
+      [window.__editingTeamIds[i - 1], window.__editingTeamIds[i]] = [window.__editingTeamIds[i], window.__editingTeamIds[i - 1]];
+      renderTeamPicker();
+    });
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "btn btn-small";
+    down.textContent = "↓";
+    down.disabled = i === window.__editingTeamIds.length - 1;
+    down.addEventListener("click", () => {
+      [window.__editingTeamIds[i + 1], window.__editingTeamIds[i]] = [window.__editingTeamIds[i], window.__editingTeamIds[i + 1]];
+      renderTeamPicker();
+    });
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "btn btn-small danger";
+    rm.textContent = "×";
+    rm.addEventListener("click", () => {
+      window.__editingTeamIds.splice(i, 1);
+      renderTeamPicker();
+    });
+    actions.appendChild(up);
+    actions.appendChild(down);
+    actions.appendChild(rm);
+    li.appendChild(actions);
+    list.appendChild(li);
+  }
+}
+
+function openTournamentEditModal(t) {
+  $("toId").value = t ? t.id : "";
+  $("tournamentEditTitle").textContent = t ? "Редактировать турнир" : "Новый турнир";
+  $("toTitle").value = t ? t.title : "";
+  $("toAge").value = t ? t.age_category : "";
+  $("toBirthYear").value = t && t.birth_year ? t.birth_year : "";
+  $("toStart").value = t ? t.start_date : "";
+  $("toEnd").value = t ? t.end_date : "";
+  $("toLocation").value = t ? t.location : "";
+  $("toCity").value = t && t.city ? t.city : "";
+  $("toSeason").value = t && t.season ? t.season : "";
+  $("toDescription").value = t && t.description ? t.description : "";
+  $("toUrl").value = t && t.url ? t.url : "";
+  $("toPosition").value = t ? String(t.position) : "0";
+  $("toVisible").checked = t ? !!t.is_visible : true;
+  window.__editingTeamIds = t && Array.isArray(t.teams) ? t.teams.map((x) => x.id) : [];
+  renderTeamPicker();
+  $("tournamentEditMsg").textContent = "";
+  show($("tournamentEditMsg"), false);
+  show($("tournamentEditModal"), true);
+  $("tournamentEditModal").setAttribute("aria-hidden", "false");
+}
+
+function closeTournamentEditModal() {
+  show($("tournamentEditModal"), false);
+  $("tournamentEditModal").setAttribute("aria-hidden", "true");
 }
 
 function openEditModal(u) {
@@ -770,6 +1033,156 @@ $("neRefreshBtn").addEventListener("click", async () => {
   }
 });
 
+// ---------- Teams handlers ----------
+
+$("refreshTeamsBtn").addEventListener("click", async () => {
+  try { await loadTeams(); }
+  catch (err) { $("teamsError").textContent = err.message; show($("teamsError"), true); }
+});
+
+$("teamCreateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("teamCreateMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const name = String($("tcName").value || "").trim();
+  const logo = String($("tcLogo").value || "").trim();
+  if (!name) {
+    msg.textContent = "Название обязательно.";
+    show(msg, true);
+    return;
+  }
+  try {
+    await apiFetch("/teams", { method: "POST", body: JSON.stringify({ name, logo: logo || null }) });
+    msg.textContent = "Команда добавлена.";
+    show(msg, true);
+    e.target.reset();
+    await loadTeams();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
+$("teamEditCancelBtn").addEventListener("click", closeTeamEditModal);
+$("teamEditModal").addEventListener("click", (e) => {
+  if (e.target === $("teamEditModal")) closeTeamEditModal();
+});
+
+$("teamEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = $("teId").value;
+  const msg = $("teamEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const name = String($("teName").value || "").trim();
+  const logo = String($("teLogo").value || "").trim();
+  if (!name) {
+    msg.textContent = "Название обязательно.";
+    show(msg, true);
+    return;
+  }
+  try {
+    await apiFetch(`/teams/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, logo: logo || null }),
+    });
+    closeTeamEditModal();
+    await loadTeams();
+    if (window.__activeTab === "tournaments") await loadTournaments();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
+// ---------- Tournaments handlers ----------
+
+$("refreshTournamentsBtn").addEventListener("click", async () => {
+  try { await loadTournaments(); }
+  catch (err) { $("tournamentsError").textContent = err.message; show($("tournamentsError"), true); }
+});
+
+$("newTournamentBtn").addEventListener("click", async () => {
+  try {
+    if (!window.__teamsCache || !window.__teamsCache.length) {
+      window.__teamsCache = await apiFetch("/teams?limit=500");
+    }
+    openTournamentEditModal(null);
+  } catch (err) {
+    $("tournamentsError").textContent = err.message;
+    show($("tournamentsError"), true);
+  }
+});
+
+$("toAddTeamBtn").addEventListener("click", () => {
+  const sel = $("toTeamSelect");
+  const tid = sel.value;
+  if (!tid) return;
+  if (!window.__editingTeamIds.includes(tid)) {
+    window.__editingTeamIds.push(tid);
+  }
+  renderTeamPicker();
+});
+
+$("tournamentEditCancelBtn").addEventListener("click", closeTournamentEditModal);
+$("tournamentEditModal").addEventListener("click", (e) => {
+  if (e.target === $("tournamentEditModal")) closeTournamentEditModal();
+});
+
+$("tournamentEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("tournamentEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const id = $("toId").value;
+  const title = String($("toTitle").value || "").trim();
+  const age_category = String($("toAge").value || "").trim();
+  const start_date = $("toStart").value;
+  const end_date = $("toEnd").value;
+  const location = String($("toLocation").value || "").trim();
+  if (!title || !age_category || !start_date || !end_date || !location) {
+    msg.textContent = "Заполните обязательные поля: название, категория, даты, место.";
+    show(msg, true);
+    return;
+  }
+  if (end_date < start_date) {
+    msg.textContent = "Дата окончания раньше начала.";
+    show(msg, true);
+    return;
+  }
+  const birth_year = String($("toBirthYear").value || "").trim() || null;
+  const positionRaw = String($("toPosition").value || "0").trim();
+  const position = Number.parseInt(positionRaw, 10);
+  const payload = {
+    title,
+    age_category,
+    birth_year,
+    start_date,
+    end_date,
+    location,
+    city: String($("toCity").value || "").trim() || null,
+    season: String($("toSeason").value || "").trim() || null,
+    description: String($("toDescription").value || "").trim() || null,
+    url: String($("toUrl").value || "").trim() || null,
+    position: Number.isFinite(position) && position >= 0 ? position : 0,
+    is_visible: $("toVisible").checked,
+    team_ids: [...window.__editingTeamIds],
+  };
+  try {
+    if (id) {
+      await apiFetch(`/tournaments/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    } else {
+      await apiFetch("/tournaments", { method: "POST", body: JSON.stringify(payload) });
+    }
+    closeTournamentEditModal();
+    await loadTournaments();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
 $("editCancelBtn").addEventListener("click", closeEditModal);
 $("editModal").addEventListener("click", (e) => {
   if (e.target === $("editModal")) closeEditModal();
@@ -816,6 +1229,19 @@ $("editAdminForm").addEventListener("submit", async (e) => {
     msg.textContent = err.message;
     show(msg, true);
   }
+});
+
+bindLogoUpload({
+  urlInputId: "tcLogo",
+  fileInputId: "tcLogoFile",
+  buttonId: "tcLogoUploadBtn",
+  statusId: "tcLogoMsg",
+});
+bindLogoUpload({
+  urlInputId: "teLogo",
+  fileInputId: "teLogoFile",
+  buttonId: "teLogoUploadBtn",
+  statusId: "teLogoMsg",
 });
 
 (async function boot() {
