@@ -23,6 +23,7 @@ from app.repositories import questions as questions_repo
 from app.repositories import reviews as reviews_repo
 from app.repositories import service_requests as service_requests_repo
 from app.repositories import teams as teams_repo
+from app.repositories import tournament_applications as tournament_apps_repo
 from app.repositories import tournaments as tournaments_repo
 from app.schemas.admin import (
     AdminCreateRequest,
@@ -46,6 +47,10 @@ from app.schemas.review import (
     ReviewUpdate,
 )
 from app.schemas.service_request import ServiceRequestListItem
+from app.schemas.tournament_application import (
+    TournamentPlayerApplicationListItem,
+    TournamentTeamApplicationListItem,
+)
 from app.schemas.tournament import (
     TeamCreate,
     TeamListItem,
@@ -597,6 +602,78 @@ async def admin_delete_tournament(
     if not await tournaments_repo.delete_one(session, tournament_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Турнир не найден")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/tournament-applications/players",
+    response_model=list[TournamentPlayerApplicationListItem],
+)
+async def admin_list_tournament_player_applications(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> list[TournamentPlayerApplicationListItem]:
+    rows = await tournament_apps_repo.list_players(session, skip=skip, limit=limit)
+    return [TournamentPlayerApplicationListItem.model_validate(r) for r in rows]
+
+
+@router.delete(
+    "/tournament-applications/players/{app_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def admin_delete_tournament_player_application(
+    app_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await tournament_apps_repo.delete_player(session, app_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/tournament-applications/players")
+async def admin_delete_all_tournament_player_applications(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await tournament_apps_repo.delete_all_players(session)}
+
+
+@router.get(
+    "/tournament-applications/teams",
+    response_model=list[TournamentTeamApplicationListItem],
+)
+async def admin_list_tournament_team_applications(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> list[TournamentTeamApplicationListItem]:
+    rows = await tournament_apps_repo.list_teams(session, skip=skip, limit=limit)
+    return [TournamentTeamApplicationListItem.model_validate(r) for r in rows]
+
+
+@router.delete(
+    "/tournament-applications/teams/{app_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def admin_delete_tournament_team_application(
+    app_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    if not await tournament_apps_repo.delete_team(session, app_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/tournament-applications/teams")
+async def admin_delete_all_tournament_team_applications(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await tournament_apps_repo.delete_all_teams(session)}
 
 
 @router.get("/admins", response_model=list[AdminListItem])

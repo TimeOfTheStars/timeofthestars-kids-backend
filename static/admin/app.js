@@ -65,6 +65,7 @@ function setTab(name) {
   if (name === "news") loadNews();
   if (name === "teams") loadTeams();
   if (name === "tournaments") loadTournaments();
+  if (name === "tournament-apps") loadTournamentApps();
   if (name === "profile") loadMe();
   if (name === "users") loadAdmins();
 }
@@ -1409,6 +1410,115 @@ $("editAdminForm").addEventListener("submit", async (e) => {
     msg.textContent = err.message;
     show(msg, true);
   }
+});
+
+// ---------- Tournament applications ----------
+
+async function loadTournamentApps() {
+  await Promise.all([loadTaPlayers(), loadTaTeams()]);
+}
+
+async function loadTaPlayers() {
+  $("taPlayersError").textContent = "";
+  show($("taPlayersError"), false);
+  const rows = $("taPlayerRows");
+  rows.innerHTML = "";
+  const data = await apiFetch("/tournament-applications/players?limit=200");
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="6" class="muted">Пока нет заявок игроков</td></tr>`;
+    return;
+  }
+  for (const a of data) {
+    const tr = document.createElement("tr");
+    const dt = new Date(a.created_at);
+    tr.innerHTML = `
+      <td data-label="Дата">${dt.toLocaleString()}</td>
+      <td data-label="Родитель">${escapeHtml(a.parent_name)}</td>
+      <td data-label="Ребёнок">${escapeHtml(a.child_name)}</td>
+      <td data-label="Возраст">${escapeHtml(String(a.child_age))}</td>
+      <td data-label="Телефон">${escapeHtml(a.phone)}</td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: "Удалить эту заявку?",
+          request: () => apiFetch(`/tournament-applications/players/${a.id}`, { method: "DELETE" }),
+          onDone: loadTaPlayers,
+          errorTargetId: "taPlayersError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+async function loadTaTeams() {
+  $("taTeamsError").textContent = "";
+  show($("taTeamsError"), false);
+  const rows = $("taTeamRows");
+  rows.innerHTML = "";
+  const data = await apiFetch("/tournament-applications/teams?limit=200");
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="8" class="muted">Пока нет заявок команд</td></tr>`;
+    return;
+  }
+  for (const a of data) {
+    const tr = document.createElement("tr");
+    const dt = new Date(a.created_at);
+    const comment = a.comment ? String(a.comment) : "";
+    const commentPreview = comment.length > 160 ? comment.slice(0, 160) + "…" : comment;
+    tr.innerHTML = `
+      <td data-label="Дата">${dt.toLocaleString()}</td>
+      <td data-label="Команда">${escapeHtml(a.team_name)}</td>
+      <td data-label="Город">${escapeHtml(a.city)}</td>
+      <td data-label="Категория">${escapeHtml(a.age_category)}</td>
+      <td data-label="Тренер">${escapeHtml(a.coach_name)}</td>
+      <td data-label="Телефон">${escapeHtml(a.phone)}</td>
+      <td data-label="Комментарий">${commentPreview ? escapeHtml(commentPreview) : '<span class="muted">—</span>'}</td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: "Удалить эту заявку?",
+          request: () => apiFetch(`/tournament-applications/teams/${a.id}`, { method: "DELETE" }),
+          onDone: loadTaTeams,
+          errorTargetId: "taTeamsError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+$("refreshTaPlayersBtn").addEventListener("click", async () => {
+  try { await loadTaPlayers(); }
+  catch (err) { $("taPlayersError").textContent = err.message; show($("taPlayersError"), true); }
+});
+
+$("refreshTaTeamsBtn").addEventListener("click", async () => {
+  try { await loadTaTeams(); }
+  catch (err) { $("taTeamsError").textContent = err.message; show($("taTeamsError"), true); }
+});
+
+bindDeleteAll({
+  btnId: "deleteAllTaPlayersBtn",
+  msgId: "deleteAllTaPlayersMsg",
+  path: "/tournament-applications/players",
+  confirmText: "Удалить ВСЕ заявки игроков? Действие необратимо.",
+  reload: () => loadTaPlayers(),
+});
+bindDeleteAll({
+  btnId: "deleteAllTaTeamsBtn",
+  msgId: "deleteAllTaTeamsMsg",
+  path: "/tournament-applications/teams",
+  confirmText: "Удалить ВСЕ заявки команд? Действие необратимо.",
+  reload: () => loadTaTeams(),
 });
 
 bindLogoUpload({

@@ -89,6 +89,44 @@ class VKClient:
             f"🗓️ Возраст: {child_age}"
         )
 
+    def _build_tournament_player_message(
+        self,
+        *,
+        parent_name: str,
+        child_name: str,
+        child_age: int,
+        phone: str,
+    ) -> str:
+        return (
+            "🏆 Новая заявка на турнир (игрок):\n"
+            f"📞 Телефон: {phone}\n"
+            f"🧑‍🧒 ФИО родителя: {parent_name}\n"
+            f"🧒 ФИО ребёнка: {child_name}\n"
+            f"🗓️ Возраст: {child_age}"
+        )
+
+    def _build_tournament_team_message(
+        self,
+        *,
+        team_name: str,
+        city: str,
+        age_category: str,
+        coach_name: str,
+        phone: str,
+        comment: str | None,
+    ) -> str:
+        msg = (
+            "🏆 Новая заявка на турнир (команда):\n"
+            f"🏷️ Команда: {team_name}\n"
+            f"🏙️ Город: {city}\n"
+            f"🎯 Категория: {age_category}\n"
+            f"👤 Тренер: {coach_name}\n"
+            f"📞 Телефон: {phone}"
+        )
+        if comment:
+            msg += f"\n💬 Комментарий: {comment}"
+        return msg
+
     async def _notify_recipients(self, *, message: str, recipient_user_ids: list[int]) -> None:
         if not recipient_user_ids:
             return
@@ -525,6 +563,46 @@ class VKClient:
             child_name=child_name,
             child_age=child_age,
             service=service,
+        )
+        await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
+
+    async def notify_new_tournament_player_application(
+        self,
+        *,
+        parent_name: str,
+        child_name: str,
+        child_age: int,
+        phone: str,
+        recipient_user_ids: list[int],
+    ) -> None:
+        """Уведомление о заявке на турнир от игрока (родителя)."""
+        text = self._build_tournament_player_message(
+            parent_name=parent_name,
+            child_name=child_name,
+            child_age=child_age,
+            phone=phone,
+        )
+        await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
+
+    async def notify_new_tournament_team_application(
+        self,
+        *,
+        team_name: str,
+        city: str,
+        age_category: str,
+        coach_name: str,
+        phone: str,
+        comment: str | None,
+        recipient_user_ids: list[int],
+    ) -> None:
+        """Уведомление о заявке команды на турнир."""
+        text = self._build_tournament_team_message(
+            team_name=team_name,
+            city=city,
+            age_category=age_category,
+            coach_name=coach_name,
+            phone=phone,
+            comment=comment,
         )
         await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
 

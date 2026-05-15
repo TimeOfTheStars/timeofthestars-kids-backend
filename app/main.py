@@ -21,6 +21,7 @@ from app.api.news_posts import router as news_router
 from app.api.questions import router as questions_router
 from app.api.reviews import router as reviews_router
 from app.api.service_requests import router as service_requests_router
+from app.api.tournament_applications import router as tournament_applications_router
 from app.api.tournaments import router as tournaments_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -110,6 +111,8 @@ async def root() -> dict[str, str]:
         "reviews": "GET /reviews",
         "news": "GET /news",
         "tournaments": "GET /tournaments",
+        "tournament_player_application": "POST /tournament-applications/player",
+        "tournament_team_application": "POST /tournament-applications/team",
         "admin_api": "/api/admin",
     }
 
@@ -126,6 +129,7 @@ app.include_router(questions_router)
 app.include_router(reviews_router)
 app.include_router(news_router)
 app.include_router(tournaments_router)
+app.include_router(tournament_applications_router)
 app.include_router(admin_router, prefix="/api/admin")
 
 if _admin_static.is_dir():

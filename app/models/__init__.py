@@ -8,6 +8,10 @@ from app.models.review import Review
 from app.models.service_request import ServiceRequest
 from app.models.team import Team
 from app.models.tournament import Tournament, TournamentTeam
+from app.models.tournament_application import (
+    TournamentPlayerApplication,
+    TournamentTeamApplication,
+)
 
 __all__ = [
     "AdminUser",
@@ -18,5 +22,7 @@ __all__ = [
     "ServiceRequest",
     "Team",
     "Tournament",
+    "TournamentPlayerApplication",
     "TournamentTeam",
+    "TournamentTeamApplication",
 ]

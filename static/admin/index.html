@@ -39,6 +39,7 @@
             <button type="button" class="nav-tab" data-tab="news">Новости</button>
             <button type="button" class="nav-tab" data-tab="teams">Команды</button>
             <button type="button" class="nav-tab" data-tab="tournaments">Турниры</button>
+            <button type="button" class="nav-tab" data-tab="tournament-apps">Заявки на турнир</button>
             <button type="button" class="nav-tab" data-tab="profile">Профиль</button>
             <button type="button" class="nav-tab nav-tab-admin-only hidden" data-tab="users">Пользователи</button>
           </nav>
@@ -303,6 +304,66 @@
                     </tr>
                   </thead>
                   <tbody id="tournamentRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-tournament-apps" class="tab-panel hidden">
+            <div class="card">
+              <div class="row space-between">
+                <h1>Заявки игроков</h1>
+                <div class="row gap">
+                  <button type="button" id="deleteAllTaPlayersBtn" class="btn danger">Удалить всё</button>
+                  <button type="button" id="refreshTaPlayersBtn" class="btn">Обновить</button>
+                </div>
+              </div>
+              <p class="muted">Заявка с публичной страницы «Турниры» → «Участвовать как игрок».</p>
+              <p id="taPlayersError" class="error hidden"></p>
+              <p id="deleteAllTaPlayersMsg" class="msg hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Дата</th>
+                      <th>Родитель</th>
+                      <th>Ребёнок</th>
+                      <th>Возраст</th>
+                      <th>Телефон</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="taPlayerRows"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="row space-between">
+                <h1>Заявки команд</h1>
+                <div class="row gap">
+                  <button type="button" id="deleteAllTaTeamsBtn" class="btn danger">Удалить всё</button>
+                  <button type="button" id="refreshTaTeamsBtn" class="btn">Обновить</button>
+                </div>
+              </div>
+              <p class="muted">Заявка с публичной страницы «Турниры» → «Участвовать как команда».</p>
+              <p id="taTeamsError" class="error hidden"></p>
+              <p id="deleteAllTaTeamsMsg" class="msg hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Дата</th>
+                      <th>Команда</th>
+                      <th>Город</th>
+                      <th>Категория</th>
+                      <th>Тренер</th>
+                      <th>Телефон</th>
+                      <th>Комментарий</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="taTeamRows"></tbody>
                 </table>
               </div>
             </div>
