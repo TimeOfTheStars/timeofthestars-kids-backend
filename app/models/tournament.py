@@ -24,7 +24,7 @@ from app.models.team import Team
 
 
 class TournamentTeam(Base):
-    """Many-to-many tournament ↔ team с сохранением порядка."""
+    """Many-to-many tournament ↔ team с сохранением порядка + общее фото состава."""
 
     __tablename__ = "tournament_teams"
 
@@ -39,6 +39,7 @@ class TournamentTeam(Base):
         primary_key=True,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    photo: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     team: Mapped[Team] = relationship(lazy="joined")
 

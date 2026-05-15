@@ -493,7 +493,14 @@ function closeTeamEditModal() {
 
 // ---------- Tournaments ----------
 
-window.__editingTeamIds = []; // упорядоченный список id выбранных команд в модалке
+window.__editingTeams = []; // [{team_id, photo}] — порядок + per-tournament фото
+
+async function uploadTeamPhoto(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const data = await apiFetch("/uploads/team-photo", { method: "POST", body: fd });
+  return data.url;
+}
 
 function fmtDate(iso) {
   if (!iso) return "";
@@ -554,7 +561,7 @@ async function loadTournaments() {
 function renderTeamPicker() {
   const sel = $("toTeamSelect");
   sel.innerHTML = "";
-  const chosen = new Set(window.__editingTeamIds);
+  const chosen = new Set(window.__editingTeams.map((x) => x.team_id));
   const available = (window.__teamsCache || []).filter((t) => !chosen.has(t.id));
   if (!available.length) {
     const opt = document.createElement("option");
@@ -577,13 +584,18 @@ function renderTeamPicker() {
 
   const list = $("toTeamList");
   list.innerHTML = "";
-  for (let i = 0; i < window.__editingTeamIds.length; i++) {
-    const tid = window.__editingTeamIds[i];
-    const team = (window.__teamsCache || []).find((x) => x.id === tid);
+  for (let i = 0; i < window.__editingTeams.length; i++) {
+    const entry = window.__editingTeams[i];
+    const team = (window.__teamsCache || []).find((x) => x.id === entry.team_id);
     const li = document.createElement("li");
+    li.className = "team-list-item";
+
+    const head = document.createElement("div");
+    head.className = "team-list-head";
     const label = document.createElement("span");
-    label.textContent = team ? teamLabel(team) : `(удалена) ${tid}`;
-    li.appendChild(label);
+    label.textContent = team ? teamLabel(team) : `(удалена) ${entry.team_id}`;
+    head.appendChild(label);
+
     const actions = document.createElement("span");
     actions.className = "team-list-actions";
     const up = document.createElement("button");
@@ -592,16 +604,16 @@ function renderTeamPicker() {
     up.textContent = "↑";
     up.disabled = i === 0;
     up.addEventListener("click", () => {
-      [window.__editingTeamIds[i - 1], window.__editingTeamIds[i]] = [window.__editingTeamIds[i], window.__editingTeamIds[i - 1]];
+      [window.__editingTeams[i - 1], window.__editingTeams[i]] = [window.__editingTeams[i], window.__editingTeams[i - 1]];
       renderTeamPicker();
     });
     const down = document.createElement("button");
     down.type = "button";
     down.className = "btn btn-small";
     down.textContent = "↓";
-    down.disabled = i === window.__editingTeamIds.length - 1;
+    down.disabled = i === window.__editingTeams.length - 1;
     down.addEventListener("click", () => {
-      [window.__editingTeamIds[i + 1], window.__editingTeamIds[i]] = [window.__editingTeamIds[i], window.__editingTeamIds[i + 1]];
+      [window.__editingTeams[i + 1], window.__editingTeams[i]] = [window.__editingTeams[i], window.__editingTeams[i + 1]];
       renderTeamPicker();
     });
     const rm = document.createElement("button");
@@ -609,13 +621,80 @@ function renderTeamPicker() {
     rm.className = "btn btn-small danger";
     rm.textContent = "×";
     rm.addEventListener("click", () => {
-      window.__editingTeamIds.splice(i, 1);
+      window.__editingTeams.splice(i, 1);
       renderTeamPicker();
     });
     actions.appendChild(up);
     actions.appendChild(down);
     actions.appendChild(rm);
-    li.appendChild(actions);
+    head.appendChild(actions);
+
+    // Превью + кнопки в одну компактную строку. Размер зашит инлайн —
+    // на случай, если у клиента закэширована старая styles.css.
+    const photoRow = document.createElement("div");
+    photoRow.className = "row gap team-photo-row";
+
+    const thumbBox = document.createElement("div");
+    thumbBox.className = "team-photo-thumb";
+    thumbBox.style.cssText =
+      "width:40px;height:40px;flex:0 0 40px;border-radius:6px;overflow:hidden;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:var(--muted);";
+    if (entry.photo) {
+      const thumb = document.createElement("img");
+      thumb.alt = "";
+      thumb.src = entry.photo;
+      thumb.style.cssText = "width:100%;height:100%;object-fit:cover;display:block;cursor:pointer;";
+      thumb.title = "Открыть в полный размер";
+      thumb.addEventListener("click", () => window.open(entry.photo, "_blank", "noopener"));
+      thumbBox.appendChild(thumb);
+    } else {
+      thumbBox.textContent = "—";
+    }
+
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "btn btn-small";
+    uploadBtn.textContent = entry.photo ? "Заменить" : "Загрузить";
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.hidden = true;
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "…";
+      try {
+        const url = await uploadTeamPhoto(file);
+        window.__editingTeams[i].photo = url;
+        renderTeamPicker();
+      } catch (err) {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = "Загрузить";
+        window.alert("Ошибка загрузки: " + err.message);
+      } finally {
+        fileInput.value = "";
+      }
+    });
+    uploadBtn.addEventListener("click", () => fileInput.click());
+
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "btn btn-small danger";
+    clearBtn.textContent = "×";
+    clearBtn.title = "Убрать фото";
+    clearBtn.disabled = !entry.photo;
+    clearBtn.addEventListener("click", () => {
+      window.__editingTeams[i].photo = null;
+      renderTeamPicker();
+    });
+
+    photoRow.appendChild(thumbBox);
+    photoRow.appendChild(uploadBtn);
+    photoRow.appendChild(clearBtn);
+    photoRow.appendChild(fileInput);
+
+    li.appendChild(head);
+    li.appendChild(photoRow);
     list.appendChild(li);
   }
 }
@@ -638,7 +717,9 @@ function openTournamentEditModal(t) {
   $("toRecordingsUrl").value = t && t.recordings_url ? t.recordings_url : "";
   $("toPosition").value = t ? String(t.position) : "0";
   $("toVisible").checked = t ? !!t.is_visible : true;
-  window.__editingTeamIds = t && Array.isArray(t.teams) ? t.teams.map((x) => x.id) : [];
+  window.__editingTeams = t && Array.isArray(t.teams)
+    ? t.teams.map((x) => ({ team_id: x.id, photo: x.photo || null }))
+    : [];
   renderTeamPicker();
   $("tournamentEditMsg").textContent = "";
   show($("tournamentEditMsg"), false);
@@ -1215,8 +1296,8 @@ $("toAddTeamBtn").addEventListener("click", () => {
   const sel = $("toTeamSelect");
   const tid = sel.value;
   if (!tid) return;
-  if (!window.__editingTeamIds.includes(tid)) {
-    window.__editingTeamIds.push(tid);
+  if (!window.__editingTeams.some((x) => x.team_id === tid)) {
+    window.__editingTeams.push({ team_id: tid, photo: null });
   }
   renderTeamPicker();
 });
@@ -1266,7 +1347,7 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
     recordings_url: String($("toRecordingsUrl").value || "").trim() || null,
     position: Number.isFinite(position) && position >= 0 ? position : 0,
     is_visible: $("toVisible").checked,
-    team_ids: [...window.__editingTeamIds],
+    teams: window.__editingTeams.map((x) => ({ team_id: x.team_id, photo: x.photo })),
   };
   try {
     if (id) {

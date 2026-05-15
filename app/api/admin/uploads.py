@@ -80,3 +80,13 @@ async def upload_team_logo(
     """Загрузить логотип команды. Возвращает {url}."""
     url = await _save_image(file, subdir="teams")
     return {"url": url}
+
+
+@router.post("/uploads/team-photo")
+async def upload_team_photo(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    file: Annotated[UploadFile, File(...)],
+) -> dict[str, str]:
+    """Загрузить общую фотографию состава команды на конкретном турнире."""
+    url = await _save_image(file, subdir="team-photos")
+    return {"url": url}

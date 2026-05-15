@@ -37,6 +37,7 @@ services:
         condition: service_healthy
     volumes:
       - ./static/teams:/app/static/teams
+      - ./static/team-photos:/app/static/team-photos
     command: >
       sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
 

@@ -52,6 +52,8 @@ from app.schemas.tournament import (
     TeamUpdate,
     TournamentCreate,
     TournamentListItem,
+    TournamentTeamAdminItem,
+    TournamentTeamInput,
     TournamentUpdate,
 )
 from app.services import news_posts as news_service
@@ -455,29 +457,62 @@ async def admin_delete_team(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-async def _validate_team_ids(
+async def _validate_and_normalize_teams(
     session: AsyncSession,
-    team_ids: list[uuid.UUID],
-) -> list[uuid.UUID]:
-    """Все ли id существуют. Возвращает team_ids в исходном порядке без дублей."""
-    if not team_ids:
+    items: list[TournamentTeamInput],
+) -> list[tuple[uuid.UUID, str | None]]:
+    """Все ли team_id существуют. Удаляет дубли (оставляет первое вхождение). Сохраняет порядок и photo."""
+    if not items:
         return []
     seen: set[uuid.UUID] = set()
-    deduped: list[uuid.UUID] = []
-    for tid in team_ids:
-        if tid in seen:
+    deduped: list[tuple[uuid.UUID, str | None]] = []
+    for it in items:
+        if it.team_id in seen:
             continue
-        seen.add(tid)
-        deduped.append(tid)
-    found = await teams_repo.get_by_ids(session, deduped)
+        seen.add(it.team_id)
+        deduped.append((it.team_id, it.photo))
+    found = await teams_repo.get_by_ids(session, [tid for tid, _ in deduped])
     found_ids = {t.id for t in found}
-    missing = [str(tid) for tid in deduped if tid not in found_ids]
+    missing = [str(tid) for tid, _ in deduped if tid not in found_ids]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Не найдены команды: {', '.join(missing)}",
         )
     return deduped
+
+
+def _build_tournament_item(row) -> TournamentListItem:  # noqa: ANN001 — row: Tournament
+    """Собрать админский ListItem руками: данные турнира + enriched-команды с per-tournament photo."""
+    return TournamentListItem(
+        id=row.id,
+        title=row.title,
+        age_category=row.age_category,
+        birth_year=row.birth_year,
+        start_date=row.start_date,
+        end_date=row.end_date,
+        start_time=row.start_time,
+        location=row.location,
+        city=row.city,
+        season=row.season,
+        description=row.description,
+        url=row.url,
+        recordings_url=row.recordings_url,
+        position=row.position,
+        is_visible=row.is_visible,
+        teams=[
+            TournamentTeamAdminItem(
+                id=link.team.id,
+                name=link.team.name,
+                logo=link.team.logo,
+                description=link.team.description,
+                photo=link.photo,
+            )
+            for link in row.team_links
+        ],
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 @router.get("/tournaments", response_model=list[TournamentListItem])
@@ -488,7 +523,7 @@ async def admin_list_tournaments(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> list[TournamentListItem]:
     rows = await tournaments_repo.list_all(session, skip=skip, limit=limit)
-    return [TournamentListItem.model_validate(r) for r in rows]
+    return [_build_tournament_item(r) for r in rows]
 
 
 @router.post(
@@ -506,10 +541,10 @@ async def admin_create_tournament(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="end_date раньше start_date",
         )
-    team_ids = await _validate_team_ids(session, body.team_ids)
-    fields = body.model_dump(exclude={"team_ids"})
-    row = await tournaments_repo.create_one(session, fields=fields, team_ids=team_ids)
-    return TournamentListItem.model_validate(row)
+    teams = await _validate_and_normalize_teams(session, body.teams)
+    fields = body.model_dump(exclude={"teams"})
+    row = await tournaments_repo.create_one(session, fields=fields, teams=teams)
+    return _build_tournament_item(row)
 
 
 @router.patch("/tournaments/{tournament_id}", response_model=TournamentListItem)
@@ -522,9 +557,14 @@ async def admin_update_tournament(
     raw = body.model_dump(exclude_unset=True)
     if not raw:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нет полей для обновления")
-    team_ids = raw.pop("team_ids", None)
-    if team_ids is not None:
-        team_ids = await _validate_team_ids(session, team_ids)
+    teams_raw = raw.pop("teams", None)
+    teams: list[tuple[uuid.UUID, str | None]] | None = None
+    if teams_raw is not None:
+        # body.teams был уже распарсен Pydantic'ом — повторно прогоним через схему,
+        # чтобы получить список TournamentTeamInput и провалидировать (после exclude_unset
+        # raw["teams"] это list[dict], а не list[модель]).
+        items = [TournamentTeamInput.model_validate(t) for t in teams_raw]
+        teams = await _validate_and_normalize_teams(session, items)
     # Проверка start_date/end_date с учётом текущих значений
     if "start_date" in raw or "end_date" in raw:
         existing = await tournaments_repo.get_by_id(session, tournament_id)
@@ -541,11 +581,11 @@ async def admin_update_tournament(
         session,
         tournament_id,
         fields=raw,
-        team_ids=team_ids,
+        teams=teams,
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Турнир не найден")
-    return TournamentListItem.model_validate(row)
+    return _build_tournament_item(row)
 
 
 @router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)

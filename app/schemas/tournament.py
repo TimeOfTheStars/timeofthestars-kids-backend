@@ -16,10 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 
 class TeamPublic(BaseModel):
-    """{name, logo} для фронта."""
+    """{name, logo, photo} для фронта (в контексте турнира — photo это общее фото состава)."""
 
     name: str
     logo: str | None = None
+    photo: str | None = None
 
 
 class TournamentPublic(BaseModel):
@@ -114,10 +115,35 @@ class TeamUpdate(BaseModel):
 # ----- Admin: Tournament -----
 
 
-class TournamentListItem(BaseModel):
-    """Полные данные турнира для админки (snake_case)."""
+class TournamentTeamAdminItem(BaseModel):
+    """Команда в составе конкретного турнира: данные команды + per-tournament photo."""
 
-    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    logo: str | None = None
+    description: str | None = None
+    photo: str | None = None
+
+
+class TournamentTeamInput(BaseModel):
+    """Элемент списка команд при создании/обновлении турнира."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    team_id: uuid.UUID
+    photo: str | None = Field(default=None, max_length=1024)
+
+    @field_validator("photo")
+    @classmethod
+    def _photo_blank_to_none(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
+
+class TournamentListItem(BaseModel):
+    """Полные данные турнира для админки (snake_case). Собирается вручную в роуте."""
 
     id: uuid.UUID
     title: str
@@ -134,13 +160,13 @@ class TournamentListItem(BaseModel):
     recordings_url: str | None
     position: int
     is_visible: bool
-    teams: list[TeamListItem]
+    teams: list[TournamentTeamAdminItem]
+    created_at: datetime
+    updated_at: datetime
 
     @field_serializer("start_time")
     def _serialize_start_time(self, v: time | None) -> str | None:
         return v.strftime("%H:%M") if v else None
-    created_at: datetime
-    updated_at: datetime
 
 
 class TournamentCreate(BaseModel):
@@ -160,7 +186,7 @@ class TournamentCreate(BaseModel):
     recordings_url: str | None = Field(default=None, max_length=1024)
     position: int = Field(default=0, ge=0, le=10_000)
     is_visible: bool = True
-    team_ids: list[uuid.UUID] = Field(default_factory=list)
+    teams: list[TournamentTeamInput] = Field(default_factory=list)
 
     @field_validator("title", "age_category", "location")
     @classmethod
@@ -196,7 +222,7 @@ class TournamentUpdate(BaseModel):
     recordings_url: str | None = Field(default=None, max_length=1024)
     position: int | None = Field(default=None, ge=0, le=10_000)
     is_visible: bool | None = None
-    team_ids: list[uuid.UUID] | None = None
+    teams: list[TournamentTeamInput] | None = None
 
     @field_validator("title", "age_category", "location")
     @classmethod

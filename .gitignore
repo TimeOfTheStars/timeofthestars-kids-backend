@@ -15,3 +15,5 @@ apikey
 # Загружаемые из админки логотипы — не храним в git
 static/teams/*
 !static/teams/.gitkeep
+static/team-photos/*
+!static/team-photos/.gitkeep

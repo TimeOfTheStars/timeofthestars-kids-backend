@@ -56,18 +56,23 @@ async def get_by_id(session: AsyncSession, tournament_id: uuid.UUID) -> Tourname
     return result.scalars().unique().one_or_none()
 
 
-def _replace_team_links(tournament: Tournament, team_ids: list[uuid.UUID]) -> None:
-    """Полностью переписать team_links согласно порядку team_ids."""
+def _replace_team_links(
+    tournament: Tournament,
+    teams: list[tuple[uuid.UUID, str | None]],
+) -> None:
+    """Полностью переписать team_links согласно порядку (team_id, photo)."""
     tournament.team_links.clear()
-    for pos, tid in enumerate(team_ids):
-        tournament.team_links.append(TournamentTeam(team_id=tid, position=pos))
+    for pos, (tid, photo) in enumerate(teams):
+        tournament.team_links.append(
+            TournamentTeam(team_id=tid, position=pos, photo=photo),
+        )
 
 
 async def create_one(
     session: AsyncSession,
     *,
     fields: dict[str, Any],
-    team_ids: list[uuid.UUID],
+    teams: list[tuple[uuid.UUID, str | None]],
 ) -> Tournament:
     # Связи проставляем сразу в конструкторе — иначе обращение к row.team_links
     # на свежесозданном объекте триггерит ленивую загрузку, что в async-сессии
@@ -75,8 +80,8 @@ async def create_one(
     row = Tournament(
         **fields,
         team_links=[
-            TournamentTeam(team_id=tid, position=pos)
-            for pos, tid in enumerate(team_ids)
+            TournamentTeam(team_id=tid, position=pos, photo=photo)
+            for pos, (tid, photo) in enumerate(teams)
         ],
     )
     session.add(row)
@@ -91,15 +96,15 @@ async def update_one(
     tournament_id: uuid.UUID,
     *,
     fields: dict[str, Any],
-    team_ids: list[uuid.UUID] | None,
+    teams: list[tuple[uuid.UUID, str | None]] | None,
 ) -> Tournament | None:
     row = await get_by_id(session, tournament_id)
     if row is None:
         return None
     for key, value in fields.items():
         setattr(row, key, value)
-    if team_ids is not None:
-        _replace_team_links(row, team_ids)
+    if teams is not None:
+        _replace_team_links(row, teams)
     await session.commit()
     return await get_by_id(session, tournament_id)
 

@@ -39,7 +39,14 @@ def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
         description=row.description,
         url=row.url,
         recordings_url=row.recordings_url,
-        teams=[TeamPublic(name=t.name, logo=absolutize(t.logo, base)) for t in row.teams],
+        teams=[
+            TeamPublic(
+                name=link.team.name,
+                logo=absolutize(link.team.logo, base),
+                photo=absolutize(link.photo, base),
+            )
+            for link in row.team_links
+        ],
     )
 
 
