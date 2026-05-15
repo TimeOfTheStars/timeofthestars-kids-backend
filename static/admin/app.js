@@ -417,6 +417,13 @@ function bindLogoUpload({ urlInputId, fileInputId, buttonId, statusId }) {
 
 window.__teamsCache = [];
 
+function teamLabel(team) {
+  // Для пикера в турнире: показываем описание, если задано, иначе название.
+  const desc = team && team.description ? String(team.description).trim() : "";
+  if (desc) return desc;
+  return team ? team.name : "";
+}
+
 async function loadTeams() {
   $("teamsError").textContent = "";
   show($("teamsError"), false);
@@ -433,10 +440,13 @@ async function loadTeams() {
     const logoCell = t.logo
       ? `<img src="${escapeHtml(t.logo)}" alt="" class="team-logo" />`
       : '<span class="muted">—</span>';
+    const descRaw = t.description ? String(t.description) : "";
+    const descPreview = descRaw.length > 140 ? descRaw.slice(0, 140) + "…" : descRaw;
+    const descCell = descPreview ? escapeHtml(descPreview) : '<span class="muted">—</span>';
     tr.innerHTML = `
       <td data-label="Лого">${logoCell}</td>
       <td data-label="Название">${escapeHtml(t.name)}</td>
-      <td data-label="URL">${t.logo ? escapeHtml(t.logo) : '<span class="muted">—</span>'}</td>
+      <td data-label="Описание">${descCell}</td>
     `;
     const tdAct = document.createElement("td");
     tdAct.setAttribute("data-label", "Действие");
@@ -469,6 +479,7 @@ function openTeamEditModal(t) {
   $("teId").value = t.id;
   $("teName").value = t.name;
   $("teLogo").value = t.logo || "";
+  $("teDescription").value = t.description || "";
   $("teamEditMsg").textContent = "";
   show($("teamEditMsg"), false);
   show($("teamEditModal"), true);
@@ -559,7 +570,7 @@ function renderTeamPicker() {
     for (const t of available) {
       const opt = document.createElement("option");
       opt.value = t.id;
-      opt.textContent = t.name;
+      opt.textContent = teamLabel(t);
       sel.appendChild(opt);
     }
   }
@@ -571,7 +582,7 @@ function renderTeamPicker() {
     const team = (window.__teamsCache || []).find((x) => x.id === tid);
     const li = document.createElement("li");
     const label = document.createElement("span");
-    label.textContent = team ? team.name : `(удалена) ${tid}`;
+    label.textContent = team ? teamLabel(team) : `(удалена) ${tid}`;
     li.appendChild(label);
     const actions = document.createElement("span");
     actions.className = "team-list-actions";
@@ -1127,13 +1138,17 @@ $("teamCreateForm").addEventListener("submit", async (e) => {
   show(msg, false);
   const name = String($("tcName").value || "").trim();
   const logo = String($("tcLogo").value || "").trim();
+  const description = String($("tcDescription").value || "").trim();
   if (!name) {
     msg.textContent = "Название обязательно.";
     show(msg, true);
     return;
   }
   try {
-    await apiFetch("/teams", { method: "POST", body: JSON.stringify({ name, logo: logo || null }) });
+    await apiFetch("/teams", {
+      method: "POST",
+      body: JSON.stringify({ name, logo: logo || null, description: description || null }),
+    });
     msg.textContent = "Команда добавлена.";
     show(msg, true);
     e.target.reset();
@@ -1157,6 +1172,7 @@ $("teamEditForm").addEventListener("submit", async (e) => {
   show(msg, false);
   const name = String($("teName").value || "").trim();
   const logo = String($("teLogo").value || "").trim();
+  const description = String($("teDescription").value || "").trim();
   if (!name) {
     msg.textContent = "Название обязательно.";
     show(msg, true);
@@ -1165,7 +1181,7 @@ $("teamEditForm").addEventListener("submit", async (e) => {
   try {
     await apiFetch(`/teams/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ name, logo: logo || null }),
+      body: JSON.stringify({ name, logo: logo || null, description: description || null }),
     });
     closeTeamEditModal();
     await loadTeams();

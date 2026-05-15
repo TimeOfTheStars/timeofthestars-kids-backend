@@ -41,8 +41,9 @@ async def create_one(
     *,
     name: str,
     logo: str | None,
+    description: str | None = None,
 ) -> Team:
-    row = Team(name=name, logo=logo)
+    row = Team(name=name, logo=logo, description=description)
     session.add(row)
     await session.commit()
     await session.refresh(row)

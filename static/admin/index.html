@@ -243,6 +243,9 @@
                   </div>
                 </label>
                 <p id="tcLogoMsg" class="msg muted hidden"></p>
+                <label>Описание (используется в выборе команд при создании турнира)
+                  <textarea id="tcDescription" rows="3" maxlength="2000"></textarea>
+                </label>
                 <button type="submit" class="btn primary">Добавить команду</button>
                 <p id="teamCreateMsg" class="msg hidden"></p>
               </form>
@@ -264,7 +267,7 @@
                     <tr>
                       <th>Лого</th>
                       <th>Название</th>
-                      <th>URL логотипа</th>
+                      <th>Описание</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -451,6 +454,9 @@
             </div>
           </label>
           <p id="teLogoMsg" class="msg muted hidden"></p>
+          <label>Описание (используется в выборе команд при создании турнира)
+            <textarea id="teDescription" rows="3" maxlength="2000"></textarea>
+          </label>
           <div class="row gap">
             <button type="submit" class="btn primary">Сохранить</button>
             <button type="button" id="teamEditCancelBtn" class="btn">Отмена</button>

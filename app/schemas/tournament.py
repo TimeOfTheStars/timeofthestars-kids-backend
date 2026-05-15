@@ -56,6 +56,7 @@ class TeamListItem(BaseModel):
     id: uuid.UUID
     name: str
     logo: str | None
+    description: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -65,6 +66,7 @@ class TeamCreate(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     logo: str | None = Field(default=None, max_length=1024)
+    description: str | None = Field(default=None, max_length=2000)
 
     @field_validator("name")
     @classmethod
@@ -74,7 +76,7 @@ class TeamCreate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("logo")
+    @field_validator("logo", "description")
     @classmethod
     def _logo_blank_to_none(cls, v: str | None) -> str | None:
         if v is None:
@@ -88,6 +90,7 @@ class TeamUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     logo: str | None = Field(default=None, max_length=1024)
+    description: str | None = Field(default=None, max_length=2000)
 
     @field_validator("name")
     @classmethod
@@ -99,7 +102,7 @@ class TeamUpdate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("logo")
+    @field_validator("logo", "description")
     @classmethod
     def _logo_blank_to_none(cls, v: str | None) -> str | None:
         if v is None:

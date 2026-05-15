@@ -419,7 +419,12 @@ async def admin_create_team(
     admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TeamListItem:
-    row = await teams_repo.create_one(session, name=body.name, logo=body.logo)
+    row = await teams_repo.create_one(
+        session,
+        name=body.name,
+        logo=body.logo,
+        description=body.description,
+    )
     return TeamListItem.model_validate(row)
 
 
