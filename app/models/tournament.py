@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import (
     Boolean,
@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -57,6 +58,7 @@ class Tournament(Base):
     birth_year: Mapped[str | None] = mapped_column(String(32), nullable=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     location: Mapped[str] = mapped_column(String(512), nullable=False)
     city: Mapped[str | None] = mapped_column(String(255), nullable=True)
     season: Mapped[str | None] = mapped_column(String(16), nullable=True)

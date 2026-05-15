@@ -32,6 +32,7 @@ def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
         birth_year=row.birth_year,
         start_date=row.start_date,
         end_date=row.end_date,
+        start_time=row.start_time,
         location=row.location,
         city=row.city,
         season=season,

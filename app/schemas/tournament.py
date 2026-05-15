@@ -7,9 +7,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 
 # ----- Public (camelCase) -----
@@ -33,6 +33,7 @@ class TournamentPublic(BaseModel):
     birth_year: str | None = Field(default=None, serialization_alias="birthYear")
     start_date: date = Field(serialization_alias="startDate")
     end_date: date = Field(serialization_alias="endDate")
+    start_time: time | None = Field(default=None, serialization_alias="startTime")
     location: str
     city: str | None = None
     season: str | None = None
@@ -40,6 +41,10 @@ class TournamentPublic(BaseModel):
     url: str | None = None
     recordings_url: str | None = Field(default=None, serialization_alias="recordingsUrl")
     teams: list[TeamPublic] = []
+
+    @field_serializer("start_time")
+    def _serialize_start_time(self, v: time | None) -> str | None:
+        return v.strftime("%H:%M") if v else None
 
 
 # ----- Admin: Team -----
@@ -117,6 +122,7 @@ class TournamentListItem(BaseModel):
     birth_year: str | None
     start_date: date
     end_date: date
+    start_time: time | None
     location: str
     city: str | None
     season: str | None
@@ -126,6 +132,10 @@ class TournamentListItem(BaseModel):
     position: int
     is_visible: bool
     teams: list[TeamListItem]
+
+    @field_serializer("start_time")
+    def _serialize_start_time(self, v: time | None) -> str | None:
+        return v.strftime("%H:%M") if v else None
     created_at: datetime
     updated_at: datetime
 
@@ -138,6 +148,7 @@ class TournamentCreate(BaseModel):
     birth_year: str | None = Field(default=None, max_length=32)
     start_date: date
     end_date: date
+    start_time: time | None = None
     location: str = Field(..., min_length=1, max_length=512)
     city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)
@@ -173,6 +184,7 @@ class TournamentUpdate(BaseModel):
     birth_year: str | None = Field(default=None, max_length=32)
     start_date: date | None = None
     end_date: date | None = None
+    start_time: time | None = None
     location: str | None = Field(default=None, min_length=1, max_length=512)
     city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)
