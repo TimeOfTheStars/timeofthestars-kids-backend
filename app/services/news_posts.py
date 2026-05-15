@@ -12,11 +12,23 @@ from app.clients.vk_client import VKClient
 from app.core.config import Settings
 from app.models.news_post import NewsPost
 from app.repositories import news_posts as news_repo
+from app.schemas.news_post import NewsPostSyncResponse
 
 logger = logging.getLogger(__name__)
 
 
 _VK_WALL_RE = re.compile(r"wall(-?\d+)_(\d+)")
+
+# Префиксы текста постов, которые НЕ нужно тащить в БД при автосинке.
+_SKIP_PREFIXES: tuple[str, ...] = ("ПРЯМЫЕ ТРАНСЛЯЦИИ",)
+
+# Сколько последних постов тянуть за один синк.
+_NEWS_SYNC_LIMIT = 20
+
+
+def _should_skip_by_text(text: str) -> bool:
+    upper = text.lstrip().upper()
+    return any(upper.startswith(prefix) for prefix in _SKIP_PREFIXES)
 
 
 class NewsPostError(Exception):
@@ -110,6 +122,84 @@ async def import_news_post_from_url(
         },
     )
     return row
+
+
+async def sync_news_from_vk(
+    session: AsyncSession,
+    http_client: httpx.AsyncClient,
+    settings: Settings,
+) -> NewsPostSyncResponse:
+    """Стянуть все посты со стены сообщества и добавить только новые.
+
+    Уже сохранённые записи (по vk_owner_id + vk_post_id) не трогаем — чтобы
+    ручные правки в админке не затирались. Посты, начинающиеся со слов из
+    `_SKIP_PREFIXES` (например «ПРЯМЫЕ ТРАНСЛЯЦИИ»), пропускаются.
+    """
+    owner_id = -abs(settings.vk_reviews_group_id)  # для group walls owner_id отрицательный
+    vk = VKClient(http_client, settings)
+    posts = await vk.fetch_wall_posts(owner_id=owner_id, limit=_NEWS_SYNC_LIMIT)
+
+    fetched = len(posts)
+    skipped_empty = 0
+    skipped_filtered = 0
+    candidates: list[dict] = []
+
+    for p in posts:
+        text = p.get("text") or ""
+        image = p.get("image")
+        if _should_skip_by_text(text):
+            skipped_filtered += 1
+            continue
+        if not text and not image:
+            skipped_empty += 1
+            continue
+        candidates.append(p)
+
+    candidate_ids = [int(p["post_id"]) for p in candidates]
+    existing = await news_repo.existing_vk_post_ids(
+        session,
+        owner_id=owner_id,
+        post_ids=candidate_ids,
+    )
+
+    new_rows: list[NewsPost] = []
+    for p in candidates:
+        pid = int(p["post_id"])
+        if pid in existing:
+            continue
+        new_rows.append(
+            NewsPost(
+                vk_owner_id=owner_id,
+                vk_post_id=pid,
+                vk_post_date=p.get("date"),
+                url=canonical_post_url(owner_id, pid),
+                image=p.get("image"),
+                excerpt=p.get("text") or "",
+                position=0,
+                is_visible=True,
+            ),
+        )
+
+    created = await news_repo.bulk_create(session, new_rows)
+
+    logger.info(
+        "News sync done",
+        extra={
+            "fetched": fetched,
+            "created_count": created,
+            "skipped_existing": len(existing),
+            "skipped_empty": skipped_empty,
+            "skipped_filtered": skipped_filtered,
+        },
+    )
+
+    return NewsPostSyncResponse(
+        fetched=fetched,
+        created=created,
+        skipped_existing=len(existing),
+        skipped_empty=skipped_empty,
+        skipped_filtered=skipped_filtered,
+    )
 
 
 async def refresh_news_post_from_vk(

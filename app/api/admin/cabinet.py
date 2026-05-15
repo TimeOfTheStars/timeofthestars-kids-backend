@@ -32,7 +32,12 @@ from app.schemas.admin import (
     AdminVkPatchRequest,
     AppointmentListItem,
 )
-from app.schemas.news_post import NewsPostCreate, NewsPostListItem, NewsPostUpdate
+from app.schemas.news_post import (
+    NewsPostCreate,
+    NewsPostListItem,
+    NewsPostSyncResponse,
+    NewsPostUpdate,
+)
 from app.schemas.question import QuestionListItem
 from app.schemas.review import (
     ReviewCreate,
@@ -139,19 +144,60 @@ async def admin_delete_service_request(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.delete("/requests/all")
-async def admin_delete_all_requests(
+@router.delete("/appointments")
+async def admin_delete_all_appointments(
     admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> dict[str, int]:
-    deleted_appointments = await appointments_repo.delete_all_appointments(session)
-    deleted_service_requests = await service_requests_repo.delete_all_service_requests(session)
-    deleted_questions = await questions_repo.delete_all_questions(session)
-    return {
-        "appointments": deleted_appointments,
-        "service_requests": deleted_service_requests,
-        "questions": deleted_questions,
-    }
+    return {"deleted": await appointments_repo.delete_all_appointments(session)}
+
+
+@router.delete("/service-requests")
+async def admin_delete_all_service_requests(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await service_requests_repo.delete_all_service_requests(session)}
+
+
+@router.delete("/questions")
+async def admin_delete_all_questions(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await questions_repo.delete_all_questions(session)}
+
+
+@router.delete("/reviews")
+async def admin_delete_all_reviews(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await reviews_repo.delete_all(session)}
+
+
+@router.delete("/news")
+async def admin_delete_all_news(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await news_repo.delete_all(session)}
+
+
+@router.delete("/teams")
+async def admin_delete_all_teams(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await teams_repo.delete_all(session)}
+
+
+@router.delete("/tournaments")
+async def admin_delete_all_tournaments(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    return {"deleted": await tournaments_repo.delete_all(session)}
 
 
 def _get_http_client(request: Request) -> httpx.AsyncClient:
@@ -326,6 +372,23 @@ async def admin_refresh_news(
     except VKAPIError as exc:
         raise _vk_error_to_http(exc) from exc
     return NewsPostListItem.model_validate(row)
+
+
+@router.post("/news/sync", response_model=NewsPostSyncResponse)
+async def admin_sync_news(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    http_client: Annotated[httpx.AsyncClient, Depends(_get_http_client)],
+) -> NewsPostSyncResponse:
+    """Стянуть все посты со стены группы и добавить только новые.
+
+    Существующие записи не трогаются. Посты с префиксом «ПРЯМЫЕ ТРАНСЛЯЦИИ» пропускаются.
+    """
+    try:
+        return await news_service.sync_news_from_vk(session, http_client, settings)
+    except VKAPIError as exc:
+        raise _vk_error_to_http(exc) from exc
 
 
 @router.delete("/news/{news_id}", status_code=status.HTTP_204_NO_CONTENT)

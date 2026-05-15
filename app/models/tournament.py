@@ -62,6 +62,7 @@ class Tournament(Base):
     season: Mapped[str | None] = mapped_column(String(16), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    recordings_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

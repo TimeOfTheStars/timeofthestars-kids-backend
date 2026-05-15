@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,6 +26,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.session import AsyncSessionLocal
 from app.services.admin_bootstrap import bootstrap_first_admin_if_configured
+from app.services.background_sync import run_periodic_vk_sync
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ _static_root = _project_root / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Configure logging, bootstrap admin, shared httpx client (async)."""
+    """Configure logging, bootstrap admin, shared httpx client + фоновый автосинк."""
     configure_logging()
     settings = get_settings()
     async with AsyncSessionLocal() as session:
@@ -42,7 +45,28 @@ async def lifespan(app: FastAPI):
     timeout = httpx.Timeout(settings.http_timeout_seconds)
     async with httpx.AsyncClient(timeout=timeout) as client:
         app.state.http_client = client
-        yield
+
+        sync_task: asyncio.Task[None] | None = None
+        if settings.vk_sync_interval_minutes > 0:
+            sync_task = asyncio.create_task(
+                run_periodic_vk_sync(
+                    settings,
+                    client,
+                    interval_seconds=settings.vk_sync_interval_minutes * 60,
+                    initial_delay_seconds=settings.vk_sync_initial_delay_seconds,
+                ),
+                name="vk-auto-sync",
+            )
+        else:
+            logger.info("VK auto-sync disabled (VK_SYNC_INTERVAL_MINUTES=0)")
+
+        try:
+            yield
+        finally:
+            if sync_task is not None:
+                sync_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await sync_task
 
 
 app = FastAPI(

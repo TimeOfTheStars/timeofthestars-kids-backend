@@ -109,3 +109,9 @@ async def delete_one(session: AsyncSession, tournament_id: uuid.UUID) -> bool:
     result = await session.execute(stmt)
     await session.commit()
     return bool(result.rowcount)
+
+
+async def delete_all(session: AsyncSession) -> int:
+    result = await session.execute(delete(Tournament))
+    await session.commit()
+    return int(result.rowcount or 0)

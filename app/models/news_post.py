@@ -25,6 +25,7 @@ class NewsPost(Base):
     )
     vk_owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     vk_post_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    vk_post_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     url: Mapped[str] = mapped_column(String(512), nullable=False)
     image: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     excerpt: Mapped[str] = mapped_column(Text, nullable=False, default="")

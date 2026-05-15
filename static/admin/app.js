@@ -621,6 +621,7 @@ function openTournamentEditModal(t) {
   $("toSeason").value = t && t.season ? t.season : "";
   $("toDescription").value = t && t.description ? t.description : "";
   $("toUrl").value = t && t.url ? t.url : "";
+  $("toRecordingsUrl").value = t && t.recordings_url ? t.recordings_url : "";
   $("toPosition").value = t ? String(t.position) : "0";
   $("toVisible").checked = t ? !!t.is_visible : true;
   window.__editingTeamIds = t && Array.isArray(t.teams) ? t.teams.map((x) => x.id) : [];
@@ -740,22 +741,80 @@ $("refreshAdminsBtn").addEventListener("click", async () => {
   }
 });
 
-$("deleteAllBtn").addEventListener("click", async () => {
-  const msg = $("deleteAllMsg");
-  msg.textContent = "";
-  show(msg, false);
-  if (!window.confirm("Удалить вообще все заявки, заявки на услуги и вопросы? Действие необратимо.")) return;
-  try {
-    const res = await apiFetch("/requests/all", { method: "DELETE" });
-    msg.textContent = `Удалено: заявки ${res.appointments}, услуги ${res.service_requests}, вопросы ${res.questions}.`;
-    show(msg, true);
-    if (window.__activeTab === "appointments") await loadAppointments();
-    if (window.__activeTab === "services") await loadServiceRequests();
-    if (window.__activeTab === "questions") await loadQuestions();
-  } catch (err) {
-    msg.textContent = err.message;
-    show(msg, true);
-  }
+function bindDeleteAll({ btnId, msgId, path, confirmText, reload }) {
+  const btn = $(btnId);
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const msg = $(msgId);
+    msg.textContent = "";
+    show(msg, false);
+    if (!window.confirm(confirmText)) return;
+    btn.disabled = true;
+    try {
+      const res = await apiFetch(path, { method: "DELETE" });
+      msg.textContent = `Удалено: ${res.deleted}.`;
+      show(msg, true);
+      if (reload) await reload();
+    } catch (err) {
+      msg.textContent = err.message;
+      show(msg, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+bindDeleteAll({
+  btnId: "deleteAllAppointmentsBtn",
+  msgId: "deleteAllAppointmentsMsg",
+  path: "/appointments",
+  confirmText: "Удалить ВСЕ заявки? Действие необратимо.",
+  reload: () => loadAppointments(),
+});
+bindDeleteAll({
+  btnId: "deleteAllServicesBtn",
+  msgId: "deleteAllServicesMsg",
+  path: "/service-requests",
+  confirmText: "Удалить ВСЕ заявки на услуги? Действие необратимо.",
+  reload: () => loadServiceRequests(),
+});
+bindDeleteAll({
+  btnId: "deleteAllQuestionsBtn",
+  msgId: "deleteAllQuestionsMsg",
+  path: "/questions",
+  confirmText: "Удалить ВСЕ вопросы? Действие необратимо.",
+  reload: () => loadQuestions(),
+});
+bindDeleteAll({
+  btnId: "deleteAllReviewsBtn",
+  msgId: "deleteAllReviewsMsg",
+  path: "/reviews",
+  confirmText: "Удалить ВСЕ отзывы? Действие необратимо.",
+  reload: () => loadReviews(),
+});
+bindDeleteAll({
+  btnId: "deleteAllNewsBtn",
+  msgId: "deleteAllNewsMsg",
+  path: "/news",
+  confirmText: "Удалить ВСЕ новости? Действие необратимо.",
+  reload: () => loadNews(),
+});
+bindDeleteAll({
+  btnId: "deleteAllTeamsBtn",
+  msgId: "deleteAllTeamsMsg",
+  path: "/teams",
+  confirmText: "Удалить ВСЕ команды? Они также исчезнут из всех турниров.",
+  reload: async () => {
+    await loadTeams();
+    if (window.__activeTab === "tournaments") await loadTournaments();
+  },
+});
+bindDeleteAll({
+  btnId: "deleteAllTournamentsBtn",
+  msgId: "deleteAllTournamentsMsg",
+  path: "/tournaments",
+  confirmText: "Удалить ВСЕ турниры? Действие необратимо.",
+  reload: () => loadTournaments(),
 });
 
 $("vkForm").addEventListener("submit", async (e) => {
@@ -935,6 +994,24 @@ $("refreshNewsBtn").addEventListener("click", async () => {
   } catch (err) {
     $("newsError").textContent = err.message;
     show($("newsError"), true);
+  }
+});
+
+$("syncNewsBtn").addEventListener("click", async () => {
+  const msg = $("newsSyncMsg");
+  msg.textContent = "";
+  show(msg, false);
+  $("syncNewsBtn").disabled = true;
+  try {
+    const res = await apiFetch("/news/sync", { method: "POST" });
+    msg.textContent = `Получено из VK: ${res.fetched}, добавлено новых: ${res.created}, уже было: ${res.skipped_existing}, пропущено по фильтру: ${res.skipped_filtered}, пустых: ${res.skipped_empty}.`;
+    show(msg, true);
+    await loadNews();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  } finally {
+    $("syncNewsBtn").disabled = false;
   }
 });
 
@@ -1165,6 +1242,7 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
     season: String($("toSeason").value || "").trim() || null,
     description: String($("toDescription").value || "").trim() || null,
     url: String($("toUrl").value || "").trim() || null,
+    recordings_url: String($("toRecordingsUrl").value || "").trim() || null,
     position: Number.isFinite(position) && position >= 0 ? position : 0,
     is_visible: $("toVisible").checked,
     team_ids: [...window.__editingTeamIds],

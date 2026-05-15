@@ -53,6 +53,20 @@ class Settings(BaseSettings):
         alias="VK_REVIEWS_TOPIC_ID",
         description="ID обсуждения (topic) с отзывами",
     )
+    vk_sync_interval_minutes: int = Field(
+        default=15,
+        ge=0,
+        le=1440,
+        alias="VK_SYNC_INTERVAL_MINUTES",
+        description="Интервал автосинка отзывов и новостей из VK (минут). 0 — выключить.",
+    )
+    vk_sync_initial_delay_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=3600,
+        alias="VK_SYNC_INITIAL_DELAY_SECONDS",
+        description="Задержка перед первым автосинком после старта (секунд).",
+    )
     sqlalchemy_echo: bool = Field(default=False, alias="SQLALCHEMY_ECHO")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 

@@ -44,24 +44,17 @@
           </nav>
         </aside>
         <div class="dash-content">
-          <div class="card danger-card">
-            <div class="row space-between top-actions">
-              <div>
-                <h2>Очистка данных</h2>
-                <p class="muted">Удаляет все заявки, заявки на услуги и вопросы.</p>
-              </div>
-              <button type="button" id="deleteAllBtn" class="btn danger">Удалить всё</button>
-            </div>
-            <p id="deleteAllMsg" class="msg hidden"></p>
-          </div>
-
           <div id="tab-appointments" class="tab-panel">
             <div class="card">
               <div class="row space-between">
                 <h1>Заявки</h1>
-                <button type="button" id="refreshAppointmentsBtn" class="btn">Обновить</button>
+                <div class="row gap">
+                  <button type="button" id="deleteAllAppointmentsBtn" class="btn danger">Удалить всё</button>
+                  <button type="button" id="refreshAppointmentsBtn" class="btn">Обновить</button>
+                </div>
               </div>
               <p id="listError" class="error hidden"></p>
+              <p id="deleteAllAppointmentsMsg" class="msg hidden"></p>
               <div class="table-wrap">
                 <table class="table">
                   <thead>
@@ -84,10 +77,14 @@
             <div class="card">
               <div class="row space-between">
                 <h1>Заявки на услуги</h1>
-                <button type="button" id="refreshServicesBtn" class="btn">Обновить</button>
+                <div class="row gap">
+                  <button type="button" id="deleteAllServicesBtn" class="btn danger">Удалить всё</button>
+                  <button type="button" id="refreshServicesBtn" class="btn">Обновить</button>
+                </div>
               </div>
               <p class="muted">Форма на сайте: те же поля, что у записи, плюс услуга → <code>POST /service-requests</code></p>
               <p id="svcError" class="error hidden"></p>
+              <p id="deleteAllServicesMsg" class="msg hidden"></p>
               <div class="table-wrap">
                 <table class="table">
                   <thead>
@@ -111,10 +108,14 @@
             <div class="card">
               <div class="row space-between">
                 <h1>Вопросы</h1>
-                <button type="button" id="refreshQuestionsBtn" class="btn">Обновить</button>
+                <div class="row gap">
+                  <button type="button" id="deleteAllQuestionsBtn" class="btn danger">Удалить всё</button>
+                  <button type="button" id="refreshQuestionsBtn" class="btn">Обновить</button>
+                </div>
               </div>
               <p class="muted">Форма на сайте: ФИО и телефон → <code>POST /questions</code></p>
               <p id="qError" class="error hidden"></p>
+              <p id="deleteAllQuestionsMsg" class="msg hidden"></p>
               <div class="table-wrap">
                 <table class="table">
                   <thead>
@@ -137,9 +138,11 @@
                 <h1>Отзывы</h1>
                 <div class="row gap">
                   <button type="button" id="syncReviewsBtn" class="btn primary">Синхронизировать с VK</button>
+                  <button type="button" id="deleteAllReviewsBtn" class="btn danger">Удалить всё</button>
                   <button type="button" id="refreshReviewsBtn" class="btn">Обновить</button>
                 </div>
               </div>
+              <p id="deleteAllReviewsMsg" class="msg hidden"></p>
               <p class="muted">Источник: обсуждение VK. Новые комментарии добавляются, существующие записи не перезаписываются.</p>
               <p id="reviewsSyncMsg" class="msg hidden"></p>
               <p id="reviewsError" class="error hidden"></p>
@@ -199,8 +202,15 @@
             <div class="card">
               <div class="row space-between">
                 <h2>Список новостей</h2>
-                <button type="button" id="refreshNewsBtn" class="btn">Обновить</button>
+                <div class="row gap">
+                  <button type="button" id="syncNewsBtn" class="btn primary">Синхронизировать с VK</button>
+                  <button type="button" id="deleteAllNewsBtn" class="btn danger">Удалить всё</button>
+                  <button type="button" id="refreshNewsBtn" class="btn">Обновить</button>
+                </div>
               </div>
+              <p class="muted">Автосинк добавляет 20 последних постов. Посты, начинающиеся с «ПРЯМЫЕ ТРАНСЛЯЦИИ», пропускаются.</p>
+              <p id="newsSyncMsg" class="msg hidden"></p>
+              <p id="deleteAllNewsMsg" class="msg hidden"></p>
               <p id="newsError" class="error hidden"></p>
               <div class="table-wrap">
                 <table class="table">
@@ -241,9 +251,13 @@
             <div class="card">
               <div class="row space-between">
                 <h2>Список команд</h2>
-                <button type="button" id="refreshTeamsBtn" class="btn">Обновить</button>
+                <div class="row gap">
+                  <button type="button" id="deleteAllTeamsBtn" class="btn danger">Удалить всё</button>
+                  <button type="button" id="refreshTeamsBtn" class="btn">Обновить</button>
+                </div>
               </div>
               <p id="teamsError" class="error hidden"></p>
+              <p id="deleteAllTeamsMsg" class="msg hidden"></p>
               <div class="table-wrap">
                 <table class="table">
                   <thead>
@@ -266,10 +280,12 @@
                 <h1>Турниры</h1>
                 <div class="row gap">
                   <button type="button" id="newTournamentBtn" class="btn primary">Новый турнир</button>
+                  <button type="button" id="deleteAllTournamentsBtn" class="btn danger">Удалить всё</button>
                   <button type="button" id="refreshTournamentsBtn" class="btn">Обновить</button>
                 </div>
               </div>
               <p id="tournamentsError" class="error hidden"></p>
+              <p id="deleteAllTournamentsMsg" class="msg hidden"></p>
               <div class="table-wrap">
                 <table class="table">
                   <thead>
@@ -467,6 +483,7 @@
             <textarea id="toDescription" rows="3" maxlength="4000"></textarea>
           </label>
           <label>Ссылка (положение/регистрация) <input id="toUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
+          <label>Ссылка на записи матчей <input id="toRecordingsUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
           <div class="row gap fields-row">
             <label>Позиция <input id="toPosition" type="number" min="0" max="10000" value="0" /></label>
             <label class="checkbox-row"><input type="checkbox" id="toVisible" checked /> Видим на сайте</label>

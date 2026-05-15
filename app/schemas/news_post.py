@@ -22,6 +22,7 @@ class NewsPostListItem(BaseModel):
     id: uuid.UUID
     vk_owner_id: int
     vk_post_id: int
+    vk_post_date: datetime | None
     url: str
     image: str | None
     excerpt: str
@@ -47,6 +48,14 @@ class NewsPostCreate(BaseModel):
             msg = "must not be blank"
             raise ValueError(msg)
         return v.strip()
+
+
+class NewsPostSyncResponse(BaseModel):
+    fetched: int = Field(..., description="Сколько постов получено из VK")
+    created: int = Field(..., description="Сколько новых сохранено")
+    skipped_existing: int = Field(..., description="Уже было в БД (не трогали)")
+    skipped_empty: int = Field(..., description="Без текста и без картинки — пропущены")
+    skipped_filtered: int = Field(..., description="Отфильтрованы по правилам (ПРЯМЫЕ ТРАНСЛЯЦИИ)")
 
 
 class NewsPostUpdate(BaseModel):

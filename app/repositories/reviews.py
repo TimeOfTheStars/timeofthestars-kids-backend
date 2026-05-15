@@ -105,3 +105,9 @@ async def delete_one(session: AsyncSession, review_id: uuid.UUID) -> bool:
     result = await session.execute(stmt)
     await session.commit()
     return bool(result.rowcount)
+
+
+async def delete_all(session: AsyncSession) -> int:
+    result = await session.execute(delete(Review))
+    await session.commit()
+    return int(result.rowcount or 0)

@@ -37,6 +37,7 @@ def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
         season=season,
         description=row.description,
         url=row.url,
+        recordings_url=row.recordings_url,
         teams=[TeamPublic(name=t.name, logo=absolutize(t.logo, base)) for t in row.teams],
     )
 

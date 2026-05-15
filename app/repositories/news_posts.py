@@ -11,11 +11,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.news_post import NewsPost
 
 
+def _news_order():
+    """Админская «position» имеет приоритет; внутри — по дате поста в VK, новейшие сверху."""
+    return (
+        NewsPost.position.asc(),
+        NewsPost.vk_post_date.desc().nulls_last(),
+        NewsPost.created_at.desc(),
+    )
+
+
 async def list_visible(session: AsyncSession, *, limit: int = 200) -> list[NewsPost]:
     stmt = (
         select(NewsPost)
         .where(NewsPost.is_visible.is_(True))
-        .order_by(NewsPost.position.asc(), NewsPost.created_at.desc())
+        .order_by(*_news_order())
         .limit(limit)
     )
     result = await session.execute(stmt)
@@ -30,7 +39,7 @@ async def list_all(
 ) -> list[NewsPost]:
     stmt = (
         select(NewsPost)
-        .order_by(NewsPost.position.asc(), NewsPost.created_at.desc())
+        .order_by(*_news_order())
         .offset(skip)
         .limit(limit)
     )
@@ -56,6 +65,30 @@ async def get_by_vk_ref(
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def existing_vk_post_ids(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    post_ids: list[int],
+) -> set[int]:
+    if not post_ids:
+        return set()
+    stmt = select(NewsPost.vk_post_id).where(
+        NewsPost.vk_owner_id == owner_id,
+        NewsPost.vk_post_id.in_(post_ids),
+    )
+    result = await session.execute(stmt)
+    return {int(r[0]) for r in result.all() if r[0] is not None}
+
+
+async def bulk_create(session: AsyncSession, rows: list[NewsPost]) -> int:
+    if not rows:
+        return 0
+    session.add_all(rows)
+    await session.commit()
+    return len(rows)
 
 
 async def create_one(
@@ -104,3 +137,9 @@ async def delete_one(session: AsyncSession, news_id: uuid.UUID) -> bool:
     result = await session.execute(stmt)
     await session.commit()
     return bool(result.rowcount)
+
+
+async def delete_all(session: AsyncSession) -> int:
+    result = await session.execute(delete(NewsPost))
+    await session.commit()
+    return int(result.rowcount or 0)

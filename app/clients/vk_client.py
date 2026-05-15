@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 VK_METHOD_URL = "https://api.vk.com/method/messages.send"
 VK_BOARD_GET_COMMENTS_URL = "https://api.vk.com/method/board.getComments"
 VK_WALL_GET_BY_ID_URL = "https://api.vk.com/method/wall.getById"
+VK_WALL_GET_URL = "https://api.vk.com/method/wall.get"
+
+_VK_WALL_PAGE_SIZE = 100
+_VK_WALL_MAX_PAGES = 50  # 5000 постов — больше группе вряд ли понадобится
 
 # board.getComments отдаёт максимум 100 за раз.
 _VK_BOARD_PAGE_SIZE = 100
@@ -386,6 +391,123 @@ class VKClient:
 
         raise RuntimeError("VKClient.fetch_wall_post: retry loop exited unexpectedly")
 
+    async def fetch_wall_posts(
+        self,
+        *,
+        owner_id: int,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Стянуть последние `limit` постов со стены через wall.get (newest first).
+
+        owner_id для группы должен быть отрицательным (например -125696800).
+        Возвращает список словарей вида:
+            {"post_id": int, "date": datetime | None, "text": str, "image": str | None}
+        """
+        if limit <= 0:
+            return []
+        read_token = self._settings.vk_read_token or self._settings.vk_token
+        out: list[dict[str, Any]] = []
+        offset = 0
+        attempts = self._settings.vk_retry_attempts
+        backoff = self._settings.vk_retry_backoff_seconds
+
+        for _ in range(_VK_WALL_MAX_PAGES):
+            remaining = limit - len(out)
+            if remaining <= 0:
+                break
+            page_size = min(_VK_WALL_PAGE_SIZE, remaining)
+            params: dict[str, Any] = {
+                "access_token": read_token,
+                "v": self._settings.vk_api_version,
+                "owner_id": owner_id,
+                "offset": offset,
+                "count": page_size,
+                "filter": "owner",
+                "extended": 0,
+                "lang": "ru",
+            }
+            page = await self._call_vk_get_with_retry(
+                VK_WALL_GET_URL,
+                params=params,
+                attempts=attempts,
+                backoff=backoff,
+            )
+            resp = page.get("response")
+            if isinstance(resp, dict):
+                items = resp.get("items") or []
+            elif isinstance(resp, list):
+                items = resp
+            else:
+                items = []
+            if not items:
+                break
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                pid = it.get("id")
+                if not isinstance(pid, int) or pid <= 0:
+                    continue
+                out.append(
+                    {
+                        "post_id": pid,
+                        "date": _extract_post_date(it),
+                        "text": _extract_post_text(it),
+                        "image": _extract_post_image(it),
+                    },
+                )
+                if len(out) >= limit:
+                    break
+            if len(items) < page_size:
+                break
+            offset += page_size
+
+        return out
+
+    async def _call_vk_get_with_retry(
+        self,
+        url: str,
+        *,
+        params: dict[str, Any],
+        attempts: int,
+        backoff: float,
+    ) -> dict[str, Any]:
+        """Универсальный GET к VK с обработкой временных ошибок."""
+        for attempt in range(1, attempts + 1):
+            try:
+                response = await self._http.get(url, params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if "error" in payload:
+                    err = payload["error"]
+                    code = int(err.get("error_code", 0))
+                    msg = str(err.get("error_msg", "unknown"))
+                    if code in _RETRY_VK_ERROR_CODES and attempt < attempts:
+                        await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+                        continue
+                    raise VKAPIError(code, msg)
+                if not isinstance(payload, dict):
+                    raise VKAPIError(0, "unexpected VK response shape")
+                return payload
+            except (httpx.TimeoutException, httpx.TransportError):
+                if attempt >= attempts:
+                    logger.exception(
+                        "VK transport error",
+                        extra={"attempt": attempt, "url": url},
+                    )
+                    raise
+                await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code < 500 or attempt >= attempts:
+                    logger.warning(
+                        "VK HTTP error",
+                        extra={"status_code": status_code, "attempt": attempt, "url": url},
+                    )
+                    raise
+                await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+
+        raise RuntimeError("VKClient._call_vk_get_with_retry: retry loop exited unexpectedly")
+
     async def notify_new_service_request(
         self,
         *,
@@ -405,6 +527,17 @@ class VKClient:
             service=service,
         )
         await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
+
+
+def _extract_post_date(post: dict[str, Any]) -> "datetime | None":
+    """Дата публикации поста (UTC). VK отдаёт unix timestamp в поле `date`."""
+    d = post.get("date")
+    if not isinstance(d, int) or d <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(d, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _extract_post_text(post: dict[str, Any]) -> str:
