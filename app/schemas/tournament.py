@@ -35,6 +35,7 @@ class TournamentPublic(BaseModel):
     start_date: date = Field(serialization_alias="startDate")
     end_date: date = Field(serialization_alias="endDate")
     start_time: time | None = Field(default=None, serialization_alias="startTime")
+    end_time: time | None = Field(default=None, serialization_alias="endTime")
     location: str
     city: str | None = None
     season: str | None = None
@@ -43,8 +44,8 @@ class TournamentPublic(BaseModel):
     recordings_url: str | None = Field(default=None, serialization_alias="recordingsUrl")
     teams: list[TeamPublic] = []
 
-    @field_serializer("start_time")
-    def _serialize_start_time(self, v: time | None) -> str | None:
+    @field_serializer("start_time", "end_time")
+    def _serialize_time(self, v: time | None) -> str | None:
         return v.strftime("%H:%M") if v else None
 
 
@@ -152,6 +153,7 @@ class TournamentListItem(BaseModel):
     start_date: date
     end_date: date
     start_time: time | None
+    end_time: time | None
     location: str
     city: str | None
     season: str | None
@@ -164,8 +166,8 @@ class TournamentListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_serializer("start_time")
-    def _serialize_start_time(self, v: time | None) -> str | None:
+    @field_serializer("start_time", "end_time")
+    def _serialize_time(self, v: time | None) -> str | None:
         return v.strftime("%H:%M") if v else None
 
 
@@ -178,6 +180,7 @@ class TournamentCreate(BaseModel):
     start_date: date
     end_date: date
     start_time: time | None = None
+    end_time: time | None = None
     location: str = Field(..., min_length=1, max_length=512)
     city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)
@@ -214,6 +217,7 @@ class TournamentUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     start_time: time | None = None
+    end_time: time | None = None
     location: str | None = Field(default=None, min_length=1, max_length=512)
     city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)

@@ -497,6 +497,7 @@ def _build_tournament_item(row) -> TournamentListItem:  # noqa: ANN001 — row: 
         start_date=row.start_date,
         end_date=row.end_date,
         start_time=row.start_time,
+        end_time=row.end_time,
         location=row.location,
         city=row.city,
         season=row.season,

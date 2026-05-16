@@ -525,7 +525,12 @@ async function loadTournaments() {
   }
   for (const t of tournaments) {
     const tr = document.createElement("tr");
-    const timeSuffix = t.start_time ? ` · ${String(t.start_time).slice(0, 5)}` : "";
+    const startT = t.start_time ? String(t.start_time).slice(0, 5) : "";
+    const endT = t.end_time ? String(t.end_time).slice(0, 5) : "";
+    let timeSuffix = "";
+    if (startT && endT) timeSuffix = ` · ${startT}–${endT}`;
+    else if (startT) timeSuffix = ` · ${startT}`;
+    else if (endT) timeSuffix = ` · до ${endT}`;
     const dates = `${fmtDate(t.start_date)} — ${fmtDate(t.end_date)}${timeSuffix}`;
     tr.innerHTML = `
       <td data-label="Название">${escapeHtml(t.title)}</td>
@@ -708,8 +713,9 @@ function openTournamentEditModal(t) {
   $("toBirthYear").value = t && t.birth_year ? t.birth_year : "";
   $("toStart").value = t ? t.start_date : "";
   $("toEnd").value = t ? t.end_date : "";
-  // start_time приходит как "HH:MM" из API — input type=time принимает as-is.
+  // start_time/end_time приходят как "HH:MM" из API — input type=time принимает as-is.
   $("toStartTime").value = t && t.start_time ? t.start_time.slice(0, 5) : "";
+  $("toEndTime").value = t && t.end_time ? t.end_time.slice(0, 5) : "";
   $("toLocation").value = t ? t.location : "";
   $("toCity").value = t && t.city ? t.city : "";
   $("toSeason").value = t && t.season ? t.season : "";
@@ -1319,6 +1325,7 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
   const start_date = $("toStart").value;
   const end_date = $("toEnd").value;
   const start_time = $("toStartTime").value || null;
+  const end_time = $("toEndTime").value || null;
   const location = String($("toLocation").value || "").trim();
   if (!title || !age_category || !start_date || !end_date || !location) {
     msg.textContent = "Заполните обязательные поля: название, категория, даты, место.";
@@ -1340,6 +1347,7 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
     start_date,
     end_date,
     start_time,
+    end_time,
     location,
     city: String($("toCity").value || "").trim() || null,
     season: String($("toSeason").value || "").trim() || null,
