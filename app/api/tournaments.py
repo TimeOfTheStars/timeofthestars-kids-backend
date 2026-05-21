@@ -40,7 +40,6 @@ def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
             address=row.arena.address,
             city=row.arena.city,
         ),
-        city=row.city,
         season=season,
         description=row.description,
         url=row.url,

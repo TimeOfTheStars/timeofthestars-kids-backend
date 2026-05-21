@@ -563,7 +563,6 @@ def _build_tournament_item(row) -> TournamentListItem:  # noqa: ANN001 — row: 
         start_time=row.start_time,
         end_time=row.end_time,
         arena=ArenaListItem.model_validate(row.arena),
-        city=row.city,
         season=row.season,
         description=row.description,
         url=row.url,

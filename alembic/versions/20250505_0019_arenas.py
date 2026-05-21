@@ -1,13 +1,13 @@
-"""arenas: dictionary table + tournaments.arena_id (replaces location string)
+"""arenas: dictionary table + tournaments.arena_id (replaces location string + city)
 
 Revision ID: 0019
 Revises: 0018
 Create Date: 2026-05-21
 
 Каждая уникальная строка `tournaments.location` превращается в запись `arenas`
-(name = location), на которую турниры перепривязываются по arena_id. После этого
-колонка `location` дропается. Админ потом редактирует у автоматически созданных
-арен url/address/city руками.
+(name = location, city = первый встретившийся city у турниров с такой location),
+на которую турниры перепривязываются по arena_id. После этого колонки `location`
+и `city` у tournaments дропаются — город теперь живёт только на арене.
 """
 
 from __future__ import annotations
@@ -52,17 +52,21 @@ def upgrade() -> None:
         sa.Column("arena_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
 
-    # Перенос данных: каждая уникальная location → новая arena, турниры перепривязываются.
+    # Перенос данных: каждая уникальная location → новая arena (city = MIN(city)
+    # среди турниров с такой location, чтобы захватить заполненный город,
+    # если он есть). Турниры перепривязываются по arena_id.
     conn = op.get_bind()
-    rows = conn.execute(sa.text("SELECT DISTINCT location FROM tournaments")).fetchall()
-    for (loc,) in rows:
+    rows = conn.execute(
+        sa.text("SELECT location, MIN(city) AS city FROM tournaments GROUP BY location")
+    ).fetchall()
+    for loc, city in rows:
         arena_id = uuid.uuid4()
         conn.execute(
             sa.text(
-                "INSERT INTO arenas (id, name, created_at, updated_at) "
-                "VALUES (:id, :name, now(), now())"
+                "INSERT INTO arenas (id, name, city, created_at, updated_at) "
+                "VALUES (:id, :name, :city, now(), now())"
             ),
-            {"id": arena_id, "name": loc},
+            {"id": arena_id, "name": loc, "city": city},
         )
         conn.execute(
             sa.text("UPDATE tournaments SET arena_id = :aid WHERE location = :name"),
@@ -79,6 +83,7 @@ def upgrade() -> None:
         ondelete="RESTRICT",
     )
     op.drop_column("tournaments", "location")
+    op.drop_column("tournaments", "city")
 
 
 def downgrade() -> None:
@@ -86,8 +91,12 @@ def downgrade() -> None:
         "tournaments",
         sa.Column("location", sa.String(length=512), nullable=True),
     )
+    op.add_column(
+        "tournaments",
+        sa.Column("city", sa.String(length=255), nullable=True),
+    )
     op.execute(
-        "UPDATE tournaments t SET location = a.name "
+        "UPDATE tournaments t SET location = a.name, city = a.city "
         "FROM arenas a WHERE a.id = t.arena_id"
     )
     op.alter_column("tournaments", "location", nullable=False)

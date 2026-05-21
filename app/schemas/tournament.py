@@ -48,7 +48,6 @@ class TournamentPublic(BaseModel):
     start_time: time | None = Field(default=None, serialization_alias="startTime")
     end_time: time | None = Field(default=None, serialization_alias="endTime")
     arena: ArenaPublic
-    city: str | None = None
     season: str | None = None
     description: str | None = None
     url: str | None = None
@@ -166,7 +165,6 @@ class TournamentListItem(BaseModel):
     start_time: time | None
     end_time: time | None
     arena: ArenaListItem
-    city: str | None
     season: str | None
     description: str | None
     url: str | None
@@ -193,7 +191,6 @@ class TournamentCreate(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     arena_id: uuid.UUID
-    city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)
     description: str | None = Field(default=None, max_length=4000)
     url: str | None = Field(default=None, max_length=1024)
@@ -210,7 +207,7 @@ class TournamentCreate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("city", "season", "description", "url", "recordings_url", "birth_year")
+    @field_validator("season", "description", "url", "recordings_url", "birth_year")
     @classmethod
     def _blank_to_none(cls, v: str | None) -> str | None:
         if v is None:
@@ -230,7 +227,6 @@ class TournamentUpdate(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     arena_id: uuid.UUID | None = None
-    city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)
     description: str | None = Field(default=None, max_length=4000)
     url: str | None = Field(default=None, max_length=1024)
@@ -249,7 +245,7 @@ class TournamentUpdate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("city", "season", "description", "url", "recordings_url", "birth_year")
+    @field_validator("season", "description", "url", "recordings_url", "birth_year")
     @classmethod
     def _blank_to_none(cls, v: str | None) -> str | None:
         if v is None:

@@ -67,7 +67,6 @@ class Tournament(Base):
         ForeignKey("arenas.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    city: Mapped[str | None] = mapped_column(String(255), nullable=True)
     season: Mapped[str | None] = mapped_column(String(16), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

@@ -71,6 +71,10 @@ function setTab(name) {
   if (name === "users") loadAdmins();
 }
 
+function requestModalClose(closeFn) {
+  if (window.confirm("Закрыть окно без сохранения изменений?")) closeFn();
+}
+
 async function confirmAndDelete({ question, request, onDone, errorTargetId }) {
   if (!window.confirm(question)) return;
   try {
@@ -380,9 +384,56 @@ function closeNewsEditModal() {
   $("newsEditModal").setAttribute("aria-hidden", "true");
 }
 
+// SVG/GIF не трогаем: первое — векторное, второе — теряет анимацию при canvas-перерисовке.
+const _UNCOMPRESSIBLE_TYPES = new Set(["image/svg+xml", "image/gif"]);
+
+function _loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+
+async function compressImage(file, { maxDim = 1920, quality = 0.85 } = {}) {
+  if (!file.type.startsWith("image/")) return file;
+  if (_UNCOMPRESSIBLE_TYPES.has(file.type)) return file;
+
+  let img;
+  try {
+    img = await _loadImage(file);
+  } catch {
+    return file;
+  }
+
+  const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
+  // Маленькие лёгкие файлы не пережимаем (< 256 KB и в пределах maxDim).
+  if (ratio === 1 && file.size < 256 * 1024) return file;
+
+  const width = Math.round(img.width * ratio);
+  const height = Math.round(img.height * ratio);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, width, height);
+
+  // PNG с прозрачностью сохраняем как PNG (toBlob с image/png игнорирует quality),
+  // остальное — в JPEG для максимального сжатия.
+  const outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, outputType, quality));
+  if (!blob || blob.size >= file.size) return file;
+
+  // Имя сохраняем — серверу важно только content-type.
+  return new File([blob], file.name, { type: outputType, lastModified: Date.now() });
+}
+
 async function uploadTeamLogo(file) {
+  const compressed = await compressImage(file, { maxDim: 512, quality: 0.9 });
   const fd = new FormData();
-  fd.append("file", file);
+  fd.append("file", compressed);
   const data = await apiFetch("/uploads/team-logo", { method: "POST", body: fd });
   return data.url;
 }
@@ -585,8 +636,9 @@ function renderArenaSelect(selectedId) {
 window.__editingTeams = []; // [{team_id, photo}] — порядок + per-tournament фото
 
 async function uploadTeamPhoto(file) {
+  const compressed = await compressImage(file, { maxDim: 1920, quality: 0.85 });
   const fd = new FormData();
-  fd.append("file", file);
+  fd.append("file", compressed);
   const data = await apiFetch("/uploads/team-photo", { method: "POST", body: fd });
   return data.url;
 }
@@ -811,7 +863,6 @@ function openTournamentEditModal(t) {
   $("toStartTime").value = t && t.start_time ? t.start_time.slice(0, 5) : "";
   $("toEndTime").value = t && t.end_time ? t.end_time.slice(0, 5) : "";
   renderArenaSelect(t && t.arena ? t.arena.id : "");
-  $("toCity").value = t && t.city ? t.city : "";
   $("toSeason").value = t && t.season ? t.season : "";
   $("toDescription").value = t && t.description ? t.description : "";
   $("toUrl").value = t && t.url ? t.url : "";
@@ -1146,9 +1197,9 @@ $("reviewCreateForm").addEventListener("submit", async (e) => {
   }
 });
 
-$("reviewEditCancelBtn").addEventListener("click", closeReviewEditModal);
+$("reviewEditCancelBtn").addEventListener("click", () => requestModalClose(closeReviewEditModal));
 $("reviewEditModal").addEventListener("click", (e) => {
-  if (e.target === $("reviewEditModal")) closeReviewEditModal();
+  if (e.target === $("reviewEditModal")) requestModalClose(closeReviewEditModal);
 });
 
 $("reviewEditForm").addEventListener("submit", async (e) => {
@@ -1247,9 +1298,9 @@ $("newsCreateForm").addEventListener("submit", async (e) => {
   }
 });
 
-$("newsEditCancelBtn").addEventListener("click", closeNewsEditModal);
+$("newsEditCancelBtn").addEventListener("click", () => requestModalClose(closeNewsEditModal));
 $("newsEditModal").addEventListener("click", (e) => {
-  if (e.target === $("newsEditModal")) closeNewsEditModal();
+  if (e.target === $("newsEditModal")) requestModalClose(closeNewsEditModal);
 });
 
 $("newsEditForm").addEventListener("submit", async (e) => {
@@ -1341,9 +1392,9 @@ $("teamCreateForm").addEventListener("submit", async (e) => {
   }
 });
 
-$("teamEditCancelBtn").addEventListener("click", closeTeamEditModal);
+$("teamEditCancelBtn").addEventListener("click", () => requestModalClose(closeTeamEditModal));
 $("teamEditModal").addEventListener("click", (e) => {
-  if (e.target === $("teamEditModal")) closeTeamEditModal();
+  if (e.target === $("teamEditModal")) requestModalClose(closeTeamEditModal);
 });
 
 $("teamEditForm").addEventListener("submit", async (e) => {
@@ -1413,9 +1464,9 @@ $("toAddTeamBtn").addEventListener("click", () => {
   renderTeamPicker();
 });
 
-$("tournamentEditCancelBtn").addEventListener("click", closeTournamentEditModal);
+$("tournamentEditCancelBtn").addEventListener("click", () => requestModalClose(closeTournamentEditModal));
 $("tournamentEditModal").addEventListener("click", (e) => {
-  if (e.target === $("tournamentEditModal")) closeTournamentEditModal();
+  if (e.target === $("tournamentEditModal")) requestModalClose(closeTournamentEditModal);
 });
 
 $("tournamentEditForm").addEventListener("submit", async (e) => {
@@ -1453,7 +1504,6 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
     start_time,
     end_time,
     arena_id,
-    city: String($("toCity").value || "").trim() || null,
     season: String($("toSeason").value || "").trim() || null,
     description: String($("toDescription").value || "").trim() || null,
     url: String($("toUrl").value || "").trim() || null,
@@ -1476,9 +1526,9 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
   }
 });
 
-$("editCancelBtn").addEventListener("click", closeEditModal);
+$("editCancelBtn").addEventListener("click", () => requestModalClose(closeEditModal));
 $("editModal").addEventListener("click", (e) => {
-  if (e.target === $("editModal")) closeEditModal();
+  if (e.target === $("editModal")) requestModalClose(closeEditModal);
 });
 
 $("editAdminForm").addEventListener("submit", async (e) => {
@@ -1687,9 +1737,9 @@ $("arenaCreateForm").addEventListener("submit", async (e) => {
   }
 });
 
-$("arenaEditCancelBtn").addEventListener("click", closeArenaEditModal);
+$("arenaEditCancelBtn").addEventListener("click", () => requestModalClose(closeArenaEditModal));
 $("arenaEditModal").addEventListener("click", (e) => {
-  if (e.target === $("arenaEditModal")) closeArenaEditModal();
+  if (e.target === $("arenaEditModal")) requestModalClose(closeArenaEditModal);
 });
 
 $("arenaEditForm").addEventListener("submit", async (e) => {
