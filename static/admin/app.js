@@ -64,6 +64,7 @@ function setTab(name) {
   if (name === "reviews") loadReviews();
   if (name === "news") loadNews();
   if (name === "teams") loadTeams();
+  if (name === "arenas") loadArenas();
   if (name === "tournaments") loadTournaments();
   if (name === "tournament-apps") loadTournamentApps();
   if (name === "profile") loadMe();
@@ -492,6 +493,93 @@ function closeTeamEditModal() {
   $("teamEditModal").setAttribute("aria-hidden", "true");
 }
 
+// ---------- Arenas ----------
+
+window.__arenasCache = [];
+
+async function loadArenas() {
+  $("arenasError").textContent = "";
+  show($("arenasError"), false);
+  const rows = $("arenaRows");
+  rows.innerHTML = "";
+  const data = await apiFetch("/arenas?limit=500");
+  window.__arenasCache = data;
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="5" class="muted">Арен пока нет</td></tr>`;
+    return;
+  }
+  for (const a of data) {
+    const tr = document.createElement("tr");
+    const mapCell = a.url
+      ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">открыть</a>`
+      : '<span class="muted">—</span>';
+    tr.innerHTML = `
+      <td data-label="Название">${escapeHtml(a.name)}</td>
+      <td data-label="Город">${a.city ? escapeHtml(a.city) : '<span class="muted">—</span>'}</td>
+      <td data-label="Адрес">${a.address ? escapeHtml(a.address) : '<span class="muted">—</span>'}</td>
+      <td data-label="Карта">${mapCell}</td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn";
+    editBtn.textContent = "Изменить";
+    editBtn.addEventListener("click", () => openArenaEditModal(a));
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(document.createTextNode(" "));
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: `Удалить арену «${a.name}»? Не получится, если она используется в турнирах.`,
+          request: () => apiFetch(`/arenas/${a.id}`, { method: "DELETE" }),
+          onDone: loadArenas,
+          errorTargetId: "arenasError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+function openArenaEditModal(a) {
+  $("aeId").value = a.id;
+  $("aeName").value = a.name;
+  $("aeUrl").value = a.url || "";
+  $("aeAddress").value = a.address || "";
+  $("aeCity").value = a.city || "";
+  $("arenaEditMsg").textContent = "";
+  show($("arenaEditMsg"), false);
+  show($("arenaEditModal"), true);
+  $("arenaEditModal").setAttribute("aria-hidden", "false");
+}
+
+function closeArenaEditModal() {
+  show($("arenaEditModal"), false);
+  $("arenaEditModal").setAttribute("aria-hidden", "true");
+}
+
+function renderArenaSelect(selectedId) {
+  const sel = $("toArenaId");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = (window.__arenasCache || []).length
+    ? "Выберите арену…"
+    : "(нет арен — создайте на вкладке «Арены»)";
+  sel.appendChild(placeholder);
+  for (const a of window.__arenasCache || []) {
+    const opt = document.createElement("option");
+    opt.value = a.id;
+    const cityHint = a.city ? ` · ${a.city}` : "";
+    opt.textContent = `${a.name}${cityHint}`;
+    if (selectedId && a.id === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 // ---------- Tournaments ----------
 
 window.__editingTeams = []; // [{team_id, photo}] — порядок + per-tournament фото
@@ -513,12 +601,14 @@ async function loadTournaments() {
   show($("tournamentsError"), false);
   const rows = $("tournamentRows");
   rows.innerHTML = "";
-  // Команды нужны для модалки — подтянем их параллельно
-  const [tournaments, teams] = await Promise.all([
+  // Команды и арены нужны для модалки — подтянем их параллельно
+  const [tournaments, teams, arenas] = await Promise.all([
     apiFetch("/tournaments?limit=200"),
     apiFetch("/teams?limit=500"),
+    apiFetch("/arenas?limit=500"),
   ]);
   window.__teamsCache = teams;
+  window.__arenasCache = arenas;
   if (!tournaments.length) {
     rows.innerHTML = `<tr><td colspan="7" class="muted">Турниров пока нет</td></tr>`;
     return;
@@ -532,11 +622,15 @@ async function loadTournaments() {
     else if (startT) timeSuffix = ` · ${startT}`;
     else if (endT) timeSuffix = ` · до ${endT}`;
     const dates = `${fmtDate(t.start_date)} — ${fmtDate(t.end_date)}${timeSuffix}`;
+    const arenaName = t.arena && t.arena.name ? t.arena.name : "";
+    const arenaCell = t.arena && t.arena.url
+      ? `<a href="${escapeHtml(t.arena.url)}" target="_blank" rel="noopener">${escapeHtml(arenaName)}</a>`
+      : escapeHtml(arenaName);
     tr.innerHTML = `
       <td data-label="Название">${escapeHtml(t.title)}</td>
       <td data-label="Категория">${escapeHtml(t.age_category)}${t.birth_year ? ` · ${t.birth_year}` : ""}</td>
       <td data-label="Даты">${escapeHtml(dates)}</td>
-      <td data-label="Место">${escapeHtml(t.location)}</td>
+      <td data-label="Арена">${arenaCell}</td>
       <td data-label="Команд">${(t.teams || []).length}</td>
       <td data-label="Видим">${t.is_visible ? "да" : "нет"}</td>
     `;
@@ -716,7 +810,7 @@ function openTournamentEditModal(t) {
   // start_time/end_time приходят как "HH:MM" из API — input type=time принимает as-is.
   $("toStartTime").value = t && t.start_time ? t.start_time.slice(0, 5) : "";
   $("toEndTime").value = t && t.end_time ? t.end_time.slice(0, 5) : "";
-  $("toLocation").value = t ? t.location : "";
+  renderArenaSelect(t && t.arena ? t.arena.id : "");
   $("toCity").value = t && t.city ? t.city : "";
   $("toSeason").value = t && t.season ? t.season : "";
   $("toDescription").value = t && t.description ? t.description : "";
@@ -1289,8 +1383,18 @@ $("refreshTournamentsBtn").addEventListener("click", async () => {
 
 $("newTournamentBtn").addEventListener("click", async () => {
   try {
-    if (!window.__teamsCache || !window.__teamsCache.length) {
-      window.__teamsCache = await apiFetch("/teams?limit=500");
+    const [teams, arenas] = await Promise.all([
+      window.__teamsCache && window.__teamsCache.length
+        ? Promise.resolve(window.__teamsCache)
+        : apiFetch("/teams?limit=500"),
+      apiFetch("/arenas?limit=500"),
+    ]);
+    window.__teamsCache = teams;
+    window.__arenasCache = arenas;
+    if (!arenas.length) {
+      $("tournamentsError").textContent = "Сначала добавьте хотя бы одну арену во вкладке «Арены».";
+      show($("tournamentsError"), true);
+      return;
     }
     openTournamentEditModal(null);
   } catch (err) {
@@ -1326,9 +1430,9 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
   const end_date = $("toEnd").value;
   const start_time = $("toStartTime").value || null;
   const end_time = $("toEndTime").value || null;
-  const location = String($("toLocation").value || "").trim();
-  if (!title || !age_category || !start_date || !end_date || !location) {
-    msg.textContent = "Заполните обязательные поля: название, категория, даты, место.";
+  const arena_id = String($("toArenaId").value || "").trim();
+  if (!title || !age_category || !start_date || !end_date || !arena_id) {
+    msg.textContent = "Заполните обязательные поля: название, категория, даты, арена.";
     show(msg, true);
     return;
   }
@@ -1348,7 +1452,7 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
     end_date,
     start_time,
     end_time,
-    location,
+    arena_id,
     city: String($("toCity").value || "").trim() || null,
     season: String($("toSeason").value || "").trim() || null,
     description: String($("toDescription").value || "").trim() || null,
@@ -1540,6 +1644,86 @@ bindLogoUpload({
   fileInputId: "teLogoFile",
   buttonId: "teLogoUploadBtn",
   statusId: "teLogoMsg",
+});
+
+// ---------- Arenas handlers ----------
+
+$("refreshArenasBtn").addEventListener("click", async () => {
+  try { await loadArenas(); }
+  catch (err) { $("arenasError").textContent = err.message; show($("arenasError"), true); }
+});
+
+$("arenaCreateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("arenaCreateMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const name = String($("acName").value || "").trim();
+  const url = String($("acUrl").value || "").trim();
+  const address = String($("acAddress").value || "").trim();
+  const city = String($("acCity").value || "").trim();
+  if (!name) {
+    msg.textContent = "Название обязательно.";
+    show(msg, true);
+    return;
+  }
+  try {
+    await apiFetch("/arenas", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        url: url || null,
+        address: address || null,
+        city: city || null,
+      }),
+    });
+    msg.textContent = "Арена добавлена.";
+    show(msg, true);
+    e.target.reset();
+    await loadArenas();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
+$("arenaEditCancelBtn").addEventListener("click", closeArenaEditModal);
+$("arenaEditModal").addEventListener("click", (e) => {
+  if (e.target === $("arenaEditModal")) closeArenaEditModal();
+});
+
+$("arenaEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = $("aeId").value;
+  const msg = $("arenaEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const name = String($("aeName").value || "").trim();
+  const url = String($("aeUrl").value || "").trim();
+  const address = String($("aeAddress").value || "").trim();
+  const city = String($("aeCity").value || "").trim();
+  if (!name) {
+    msg.textContent = "Название обязательно.";
+    show(msg, true);
+    return;
+  }
+  try {
+    await apiFetch(`/arenas/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name,
+        url: url || null,
+        address: address || null,
+        city: city || null,
+      }),
+    });
+    closeArenaEditModal();
+    await loadArenas();
+    if (window.__activeTab === "tournaments") await loadTournaments();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
 });
 
 (async function boot() {

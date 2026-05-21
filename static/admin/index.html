@@ -38,6 +38,7 @@
             <button type="button" class="nav-tab" data-tab="reviews">Отзывы</button>
             <button type="button" class="nav-tab" data-tab="news">Новости</button>
             <button type="button" class="nav-tab" data-tab="teams">Команды</button>
+            <button type="button" class="nav-tab" data-tab="arenas">Арены</button>
             <button type="button" class="nav-tab" data-tab="tournaments">Турниры</button>
             <button type="button" class="nav-tab" data-tab="tournament-apps">Заявки на турнир</button>
             <button type="button" class="nav-tab" data-tab="profile">Профиль</button>
@@ -278,6 +279,43 @@
             </div>
           </div>
 
+          <div id="tab-arenas" class="tab-panel hidden">
+            <div class="card">
+              <h1>Арены</h1>
+              <p class="muted">Площадки для турниров. Турнир выбирает арену из этого справочника.</p>
+              <form id="arenaCreateForm" class="form form-wide">
+                <label>Название <input id="acName" required maxlength="255" placeholder="например, СК «Олимпийский»" /></label>
+                <label>Ссылка на Яндекс.Карты <input id="acUrl" type="url" maxlength="1024" placeholder="https://yandex.ru/maps/..." /></label>
+                <label>Адрес <input id="acAddress" maxlength="512" placeholder="ул. ..." /></label>
+                <label>Город <input id="acCity" maxlength="255" /></label>
+                <button type="submit" class="btn primary">Добавить арену</button>
+                <p id="arenaCreateMsg" class="msg hidden"></p>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="row space-between">
+                <h2>Список арен</h2>
+                <button type="button" id="refreshArenasBtn" class="btn">Обновить</button>
+              </div>
+              <p id="arenasError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Название</th>
+                      <th>Город</th>
+                      <th>Адрес</th>
+                      <th>Карта</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="arenaRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <div id="tab-tournaments" class="tab-panel hidden">
             <div class="card">
               <div class="row space-between">
@@ -297,7 +335,7 @@
                       <th>Название</th>
                       <th>Категория</th>
                       <th>Даты</th>
-                      <th>Место</th>
+                      <th>Арена</th>
                       <th>Команд</th>
                       <th>Видим</th>
                       <th></th>
@@ -545,7 +583,10 @@
             <label class="grow">Время начала <input id="toStartTime" type="time" /></label>
             <label class="grow">Время окончания <input id="toEndTime" type="time" /></label>
           </div>
-          <label>Место проведения <input id="toLocation" required maxlength="512" /></label>
+          <label>Арена
+            <select id="toArenaId" required></select>
+          </label>
+          <p class="muted">Адрес и ссылка на Яндекс.Карты берутся из карточки арены (вкладка «Арены»).</p>
           <div class="row gap fields-row">
             <label class="grow">Город <input id="toCity" maxlength="255" /></label>
             <label>Сезон <input id="toSeason" maxlength="16" placeholder="2025/2026" /></label>
@@ -574,6 +615,24 @@
             <button type="button" id="tournamentEditCancelBtn" class="btn">Отмена</button>
           </div>
           <p id="tournamentEditMsg" class="msg hidden"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="arenaEditModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card">
+        <h2>Редактировать арену</h2>
+        <form id="arenaEditForm" class="form form-wide">
+          <input type="hidden" id="aeId" />
+          <label>Название <input id="aeName" required maxlength="255" /></label>
+          <label>Ссылка на Яндекс.Карты <input id="aeUrl" type="url" maxlength="1024" placeholder="https://yandex.ru/maps/..." /></label>
+          <label>Адрес <input id="aeAddress" maxlength="512" /></label>
+          <label>Город <input id="aeCity" maxlength="255" /></label>
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="arenaEditCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="arenaEditMsg" class="msg hidden"></p>
         </form>
       </div>
     </div>

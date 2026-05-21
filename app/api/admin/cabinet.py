@@ -7,6 +7,7 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -18,6 +19,7 @@ from app.models.admin_user import AdminUser
 from app.clients.vk_client import VKAPIError
 from app.repositories import admin_users as admin_repo
 from app.repositories import appointments as appointments_repo
+from app.repositories import arenas as arenas_repo
 from app.repositories import news_posts as news_repo
 from app.repositories import questions as questions_repo
 from app.repositories import reviews as reviews_repo
@@ -33,6 +35,7 @@ from app.schemas.admin import (
     AdminVkPatchRequest,
     AppointmentListItem,
 )
+from app.schemas.arena import ArenaCreate, ArenaListItem, ArenaUpdate
 from app.schemas.news_post import (
     NewsPostCreate,
     NewsPostListItem,
@@ -197,6 +200,67 @@ async def admin_delete_all_teams(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> dict[str, int]:
     return {"deleted": await teams_repo.delete_all(session)}
+
+
+@router.get("/arenas", response_model=list[ArenaListItem])
+async def admin_list_arenas(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[ArenaListItem]:
+    rows = await arenas_repo.list_all(session, skip=skip, limit=limit)
+    return [ArenaListItem.model_validate(r) for r in rows]
+
+
+@router.post("/arenas", response_model=ArenaListItem, status_code=status.HTTP_201_CREATED)
+async def admin_create_arena(
+    body: ArenaCreate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ArenaListItem:
+    row = await arenas_repo.create_one(
+        session,
+        name=body.name,
+        url=body.url,
+        address=body.address,
+        city=body.city,
+    )
+    return ArenaListItem.model_validate(row)
+
+
+@router.patch("/arenas/{arena_id}", response_model=ArenaListItem)
+async def admin_update_arena(
+    arena_id: uuid.UUID,
+    body: ArenaUpdate,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ArenaListItem:
+    raw = body.model_dump(exclude_unset=True)
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нет полей для обновления")
+    row = await arenas_repo.update_one(session, arena_id, raw)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Арена не найдена")
+    return ArenaListItem.model_validate(row)
+
+
+@router.delete("/arenas/{arena_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_arena(
+    arena_id: uuid.UUID,
+    admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    try:
+        deleted = await arenas_repo.delete_one(session, arena_id)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Арена используется в одном или нескольких турнирах",
+        ) from exc
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Арена не найдена")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/tournaments")
@@ -498,7 +562,7 @@ def _build_tournament_item(row) -> TournamentListItem:  # noqa: ANN001 — row: 
         end_date=row.end_date,
         start_time=row.start_time,
         end_time=row.end_time,
-        location=row.location,
+        arena=ArenaListItem.model_validate(row.arena),
         city=row.city,
         season=row.season,
         description=row.description,
@@ -547,6 +611,8 @@ async def admin_create_tournament(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="end_date раньше start_date",
         )
+    if await arenas_repo.get_by_id(session, body.arena_id) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Арена не найдена")
     teams = await _validate_and_normalize_teams(session, body.teams)
     fields = body.model_dump(exclude={"teams"})
     row = await tournaments_repo.create_one(session, fields=fields, teams=teams)
@@ -571,6 +637,8 @@ async def admin_update_tournament(
         # raw["teams"] это list[dict], а не list[модель]).
         items = [TournamentTeamInput.model_validate(t) for t in teams_raw]
         teams = await _validate_and_normalize_teams(session, items)
+    if "arena_id" in raw and await arenas_repo.get_by_id(session, raw["arena_id"]) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Арена не найдена")
     # Проверка start_date/end_date с учётом текущих значений
     if "start_date" in raw or "end_date" in raw:
         existing = await tournaments_repo.get_by_id(session, tournament_id)

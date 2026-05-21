@@ -11,6 +11,8 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from app.schemas.arena import ArenaListItem
+
 
 # ----- Public (camelCase) -----
 
@@ -21,6 +23,15 @@ class TeamPublic(BaseModel):
     name: str
     logo: str | None = None
     photo: str | None = None
+
+
+class ArenaPublic(BaseModel):
+    """Арена для фронта: name + ссылка на Яндекс.Карты + адрес/город."""
+
+    name: str
+    url: str | None = None
+    address: str | None = None
+    city: str | None = None
 
 
 class TournamentPublic(BaseModel):
@@ -36,7 +47,7 @@ class TournamentPublic(BaseModel):
     end_date: date = Field(serialization_alias="endDate")
     start_time: time | None = Field(default=None, serialization_alias="startTime")
     end_time: time | None = Field(default=None, serialization_alias="endTime")
-    location: str
+    arena: ArenaPublic
     city: str | None = None
     season: str | None = None
     description: str | None = None
@@ -154,7 +165,7 @@ class TournamentListItem(BaseModel):
     end_date: date
     start_time: time | None
     end_time: time | None
-    location: str
+    arena: ArenaListItem
     city: str | None
     season: str | None
     description: str | None
@@ -181,7 +192,7 @@ class TournamentCreate(BaseModel):
     end_date: date
     start_time: time | None = None
     end_time: time | None = None
-    location: str = Field(..., min_length=1, max_length=512)
+    arena_id: uuid.UUID
     city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)
     description: str | None = Field(default=None, max_length=4000)
@@ -191,7 +202,7 @@ class TournamentCreate(BaseModel):
     is_visible: bool = True
     teams: list[TournamentTeamInput] = Field(default_factory=list)
 
-    @field_validator("title", "age_category", "location")
+    @field_validator("title", "age_category")
     @classmethod
     def _required_not_blank(cls, v: str) -> str:
         if not v.strip():
@@ -218,7 +229,7 @@ class TournamentUpdate(BaseModel):
     end_date: date | None = None
     start_time: time | None = None
     end_time: time | None = None
-    location: str | None = Field(default=None, min_length=1, max_length=512)
+    arena_id: uuid.UUID | None = None
     city: str | None = Field(default=None, max_length=255)
     season: str | None = Field(default=None, max_length=16)
     description: str | None = Field(default=None, max_length=4000)
@@ -228,7 +239,7 @@ class TournamentUpdate(BaseModel):
     is_visible: bool | None = None
     teams: list[TournamentTeamInput] | None = None
 
-    @field_validator("title", "age_category", "location")
+    @field_validator("title", "age_category")
     @classmethod
     def _required_not_blank(cls, v: str | None) -> str | None:
         if v is None:

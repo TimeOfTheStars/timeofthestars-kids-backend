@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.arena import Arena
 from app.models.team import Team
 
 
@@ -61,7 +62,11 @@ class Tournament(Base):
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
-    location: Mapped[str] = mapped_column(String(512), nullable=False)
+    arena_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("arenas.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     city: Mapped[str | None] = mapped_column(String(255), nullable=True)
     season: Mapped[str | None] = mapped_column(String(16), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -86,6 +91,8 @@ class Tournament(Base):
         order_by="TournamentTeam.position",
         lazy="selectin",
     )
+
+    arena: Mapped[Arena] = relationship(lazy="joined")
 
     @property
     def teams(self) -> list[Team]:

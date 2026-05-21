@@ -11,7 +11,7 @@ from app.core.urls import absolutize
 from app.db.session import get_db_session
 from app.models.tournament import Tournament
 from app.repositories import tournaments as tournaments_repo
-from app.schemas.tournament import TeamPublic, TournamentPublic
+from app.schemas.tournament import ArenaPublic, TeamPublic, TournamentPublic
 
 router = APIRouter(tags=["tournaments"])
 
@@ -34,7 +34,12 @@ def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
         end_date=row.end_date,
         start_time=row.start_time,
         end_time=row.end_time,
-        location=row.location,
+        arena=ArenaPublic(
+            name=row.arena.name,
+            url=row.arena.url,
+            address=row.arena.address,
+            city=row.arena.city,
+        ),
         city=row.city,
         season=season,
         description=row.description,

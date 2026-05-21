@@ -2,6 +2,7 @@
 
 from app.models.admin_user import AdminUser
 from app.models.appointment import Appointment
+from app.models.arena import Arena
 from app.models.news_post import NewsPost
 from app.models.question_request import QuestionRequest
 from app.models.review import Review
@@ -16,6 +17,7 @@ from app.models.tournament_application import (
 __all__ = [
     "AdminUser",
     "Appointment",
+    "Arena",
     "NewsPost",
     "QuestionRequest",
     "Review",
