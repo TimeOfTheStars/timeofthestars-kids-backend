@@ -11,9 +11,16 @@ class QuestionCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     full_name: str = Field(..., min_length=1, max_length=255, examples=["Иванова Мария Сергеевна"])
-    phone: str = Field(..., min_length=1, max_length=64, examples=["+79991234567"])
+    contact: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        examples=["mail@example.com", "@username", "+79991234567"],
+        description="Любой способ связи: телефон, email, телеграм и т.п.",
+    )
+    question: str = Field(..., min_length=1, max_length=4000, examples=["Хочу узнать расписание занятий."])
 
-    @field_validator("full_name", "phone")
+    @field_validator("full_name", "contact", "question")
     @classmethod
     def _not_blank(cls, v: str) -> str:
         if not v.strip():
@@ -32,5 +39,6 @@ class QuestionListItem(BaseModel):
 
     id: uuid.UUID
     full_name: str
-    phone: str
+    contact: str
+    question: str
     created_at: datetime

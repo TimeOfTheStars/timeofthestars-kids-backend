@@ -64,11 +64,12 @@ class VKClient:
             f"🗓️ Возраст: {child_age}"
         )
 
-    def _build_question_message(self, *, full_name: str, phone: str) -> str:
+    def _build_question_message(self, *, full_name: str, contact: str, question: str) -> str:
         return (
             "❓ Новый вопрос:\n"
             f"👤 ФИО: {full_name}\n"
-            f"📞 Телефон: {phone}"
+            f"📨 Контакт: {contact}\n"
+            f"💬 Вопрос: {question}"
         )
 
     def _build_service_request_message(
@@ -221,11 +222,12 @@ class VKClient:
         self,
         *,
         full_name: str,
-        phone: str,
+        contact: str,
+        question: str,
         recipient_user_ids: list[int],
     ) -> None:
         """Отправить уведомление о вопросе с формы (те же получатели, что и для заявок)."""
-        text = self._build_question_message(full_name=full_name, phone=phone)
+        text = self._build_question_message(full_name=full_name, contact=contact, question=question)
         await self._notify_recipients(message=text, recipient_user_ids=recipient_user_ids)
 
     async def fetch_topic_comments(

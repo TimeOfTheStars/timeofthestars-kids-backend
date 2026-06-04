@@ -1,9 +1,9 @@
-"""Вопрос с сайта (ФИО + телефон)."""
+"""Вопрос с сайта (ФИО + способ связи + сам вопрос)."""
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,7 +21,8 @@ class QuestionRequest(Base):
         default=uuid.uuid4,
     )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone: Mapped[str] = mapped_column(String(64), nullable=False)
+    contact: Mapped[str] = mapped_column(String(255), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

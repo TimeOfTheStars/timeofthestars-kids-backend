@@ -192,16 +192,21 @@ async function loadQuestions() {
   rows.innerHTML = "";
   const data = await apiFetch("/questions?limit=200");
   if (!data.length) {
-    rows.innerHTML = `<tr><td colspan="4" class="muted">Пока нет вопросов</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="5" class="muted">Пока нет вопросов</td></tr>`;
     return;
   }
   for (const q of data) {
     const tr = document.createElement("tr");
     const dt = new Date(q.created_at);
+    const questionText = q.question ? String(q.question) : "";
+    const questionCell = questionText
+      ? escapeHtml(questionText.length > 300 ? questionText.slice(0, 300) + "…" : questionText)
+      : '<span class="muted">—</span>';
     tr.innerHTML = `
       <td data-label="Дата">${dt.toLocaleString()}</td>
       <td data-label="ФИО">${escapeHtml(q.full_name)}</td>
-      <td data-label="Телефон">${escapeHtml(q.phone)}</td>
+      <td data-label="Контакт">${escapeHtml(q.contact)}</td>
+      <td data-label="Вопрос">${questionCell}</td>
     `;
     const tdAction = document.createElement("td");
     tdAction.setAttribute("data-label", "Действие");

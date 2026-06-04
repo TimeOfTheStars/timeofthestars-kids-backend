@@ -25,7 +25,8 @@ async def create_question(
     row = await questions_repo.create_question(
         session,
         full_name=payload.full_name,
-        phone=payload.phone,
+        contact=payload.contact,
+        question=payload.question,
     )
 
     recipient_ids = await admin_repo.list_vk_notify_user_ids(session)
@@ -40,7 +41,8 @@ async def create_question(
     try:
         await vk.notify_new_question(
             full_name=payload.full_name,
-            phone=payload.phone,
+            contact=payload.contact,
+            question=payload.question,
             recipient_user_ids=recipient_ids,
         )
     except (VKAPIError, httpx.HTTPError) as exc:

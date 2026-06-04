@@ -12,9 +12,10 @@ async def create_question(
     session: AsyncSession,
     *,
     full_name: str,
-    phone: str,
+    contact: str,
+    question: str,
 ) -> QuestionRequest:
-    row = QuestionRequest(full_name=full_name, phone=phone)
+    row = QuestionRequest(full_name=full_name, contact=contact, question=question)
     session.add(row)
     await session.commit()
     await session.refresh(row)
