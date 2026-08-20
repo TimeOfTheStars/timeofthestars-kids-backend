@@ -1,0 +1,68 @@
+name: Deploy
+
+# Сборка образа и деплой на прод при пуше в main.
+# Образ собирается на раннере (на сервере анонимный pull с Docker Hub упирается в лимит 429)
+# и уезжает в GHCR, сервер только подтягивает готовый тег.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/timeofthestars/timeofthestars-kids-backend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to prod
+        env:
+          APP_TAG: ${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/stdin ~/.ssh/deploy_key <<< "${{ secrets.DEPLOY_SSH_KEY }}"
+          install -m 600 /dev/stdin ~/.ssh/known_hosts <<< "${{ secrets.DEPLOY_KNOWN_HOSTS }}"
+          # Ключ на сервере привязан к forced command /usr/local/bin/tots-deploy.sh,
+          # тег и токен GHCR передаём тремя строками в stdin — в списке процессов они не светятся.
+          printf '%s\n%s\n%s\n' "$APP_TAG" "$GHCR_USER" "$GHCR_TOKEN" \
+            | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+                  -o UserKnownHostsFile=~/.ssh/known_hosts \
+                  root@${{ secrets.DEPLOY_HOST }}
+
+      - name: Smoke test
+        run: |
+          code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' https://api.timeofthestars-kids.ru/health)
+          echo "health: $code"
+          [ "$code" = "200" ]
