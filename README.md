@@ -53,6 +53,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Публичное API
 
+Статистика турниров (таблица, матчи, протокол, игроки, бомбардиры, карточка игрока)
+описана отдельно — см. [stats-api.md](stats-api.md).
+
 ### `POST /appointments`
 
 Тело запроса:
@@ -166,8 +169,10 @@ app/
   services/
   clients/    # VK API
   repositories/
-static/admin/ # UI кабинета
+static/admin/ # UI кабинета (index.html — кабинет, tournament.html — статистика турнира)
 alembic/
+scripts/      # e2e_stats_check.py — сквозная проверка статистики на живой БД
+tests/        # unit-тесты арифметики статистики (без БД): pytest tests/
 ```
 
 ## Переменные окружения

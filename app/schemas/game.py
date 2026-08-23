@@ -358,8 +358,10 @@ class StatTotalsPublic(BaseModel):
     goals: int = 0
     assists: int = 0
     points: int = 0
+    # Вратарские: null у полевых игроков и там, где табло не позволяет их распределить.
     goals_against: int | None = Field(default=None, serialization_alias="goalsAgainst")
     saves: int | None = None
+    minutes_played: int | None = Field(default=None, serialization_alias="minutesPlayed")
 
 
 class NamedTotalsPublic(BaseModel):

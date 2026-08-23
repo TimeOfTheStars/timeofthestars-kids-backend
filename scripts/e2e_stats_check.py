@@ -181,6 +181,17 @@ async def phase_paper_protocol() -> None:
 
         career = (await c.get(f"/players/{num_to_id[('impuls', 13)]}/stats")).json()
         check("карьера Рогова", (career["career"]["games"], career["career"]["goals"], career["career"]["points"]), (1, 4, 4))
+        check("у полевого в карьере вратарских нет",
+              (career["career"]["goalsAgainst"], career["career"]["saves"]), (None, None))
+        # Карточка вратаря обязана показывать ПШ/ОБ — иначе она пустая.
+        gk_career = (await c.get(f"/players/{num_to_id[('iskra', 35)]}/stats")).json()
+        check("карьера вратаря Едигарева",
+              (gk_career["career"]["goalsAgainst"], gk_career["career"]["saves"], gk_career["career"]["minutesPlayed"]),
+              (8, 18, 45))
+        check("вратарские в разбивке по турниру",
+              gk_career["byTournament"][0]["totals"]["saves"], 18)
+        check("вратарские в разбивке по команде",
+              gk_career["byTeam"][0]["totals"]["goalsAgainst"], 8)
         check("разбивка по турниру", (career["byTournament"][0]["name"], career["byTournament"][0]["totals"]["goals"]), ("Летний кубок", 4))
         check("разбивка по команде", (career["byTeam"][0]["name"], career["byTeam"][0]["totals"]["goals"]), ("ХК «ИМПУЛЬС»", 4))
 
@@ -191,6 +202,13 @@ async def phase_paper_protocol() -> None:
         gp = (await c.get(f"/games/{G['id']}")).json()
         check("состав ИСКРЫ в матче", len(gp["rosterA"]), 13)
         check("вратарь первым в составе", gp["rosterA"][0]["player"]["fullName"], "Едигарев Роман")
+        # Вратарские ЭТОГО матча должны приходить в протоколе, а не только в итогах турнира.
+        gk_a = gp["rosterA"][0]
+        check("ПШ/ОБ вратаря в протоколе матча", (gk_a["goalsAgainst"], gk_a["saves"]), (8, 18))
+        gk_b = next(x for x in gp["rosterB"] if x["isGoalie"])
+        check("ПШ/ОБ вратаря соперника", (gk_b["goalsAgainst"], gk_b["saves"]), (1, 7))
+        field_player = next(x for x in gp["rosterA"] if not x["isGoalie"])
+        check("у полевого вратарских нет", (field_player["goalsAgainst"], field_player["saves"]), (None, None))
         check("голов в хронологии", len(gp["goals"]), 9)
         first_impuls = next(g for g in gp["goals"] if g["teamId"] == impuls["id"])
         check("первый гол ИМПУЛЬСА", (first_impuls["time"], first_impuls["scorerNumber"], first_impuls["assistNumbers"]), ("13:36", 12, [2]))

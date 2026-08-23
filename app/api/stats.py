@@ -157,6 +157,34 @@ async def game_protocol(
     by_player = {r.entry.player_id: r for r in rows}
     played = {line.player_id for line in game.stat_lines}
 
+    # Вратарские показатели ЭТОГО матча выводятся из табло — ровно как на бланке.
+    # Распределяем только когда у команды в матче единственный вратарь.
+    goalies_by_team: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for line in game.stat_lines:
+        if line.is_goalie:
+            goalies_by_team.setdefault(line.team_id, []).append(line.player_id)
+
+    goalie_values: dict[uuid.UUID, tuple[int | None, int | None]] = {}
+    if game.score_a is not None and game.score_b is not None:
+        score = stats_service.GameScore(
+            team_a_id=game.team_a_id,
+            team_b_id=game.team_b_id,
+            score_a=game.score_a,
+            score_b=game.score_b,
+            shots_a=game.shots_a,
+            shots_b=game.shots_b,
+        )
+        for tid, ids in goalies_by_team.items():
+            if len(ids) == 1:
+                goalie_values[ids[0]] = stats_service.goalie_totals_for_game(score, tid)
+
+    tournament = await tournaments_repo.get_by_id(session, game.tournament_id)
+    minutes_per_game = (
+        tournament.period_minutes * tournament.periods_count
+        if tournament and tournament.period_minutes and tournament.periods_count
+        else None
+    )
+
     def roster_for(team_id: uuid.UUID) -> list[PlayerStatsPublic]:
         """Состав команды именно в этом матче — только отмеченные как игравшие."""
         out = []
@@ -165,6 +193,7 @@ async def game_protocol(
                 continue
             entry = by_player.get(line.player_id)
             team = line.team
+            conceded, saves = goalie_values.get(line.player_id, (None, None))
             out.append(
                 PlayerStatsPublic(
                     player=_player_ref(line.player, base),
@@ -175,6 +204,9 @@ async def game_protocol(
                     assists=line.assists,
                     points=line.goals + line.assists,
                     is_goalie=line.is_goalie,
+                    goals_against=conceded,
+                    saves=saves,
+                    minutes_played=minutes_per_game if conceded is not None else None,
                 )
             )
         out.sort(key=lambda p: (not p.is_goalie, p.number is None, p.number or 0))
@@ -306,8 +338,16 @@ async def player_stats(
     response.headers["Cache-Control"] = _CACHE_CONTROL
     base = settings.public_base_url
 
-    def totals(t) -> StatTotalsPublic:  # noqa: ANN001
-        return StatTotalsPublic(games=t.games, goals=t.goals, assists=t.assists, points=t.points)
+    def totals(t: stats_service.CareerTotals) -> StatTotalsPublic:
+        return StatTotalsPublic(
+            games=t.games,
+            goals=t.goals,
+            assists=t.assists,
+            points=t.points,
+            goals_against=t.goals_against,
+            saves=t.saves,
+            minutes_played=t.minutes_played,
+        )
 
     return PlayerCareerPublic(
         player=_player_ref(breakdown.player, base),

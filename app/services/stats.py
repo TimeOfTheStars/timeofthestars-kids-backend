@@ -399,11 +399,115 @@ async def best_players(
     ]
 
 
+async def goalie_totals_for_player(
+    session: AsyncSession,
+    player_id: uuid.UUID,
+    *,
+    tournament_id: uuid.UUID | None = None,
+    team_id: uuid.UUID | None = None,
+) -> tuple[GoalieAccumulator, dict[uuid.UUID, GoalieAccumulator], dict[uuid.UUID, GoalieAccumulator]]:
+    """Вратарские показатели игрока: (карьера, по турнирам, по командам).
+
+    Считаются из «Табло матча», а не хранятся. Матч учитывается только если игрок
+    был в нём ЕДИНСТВЕННЫМ вратарём своей команды — броски и голы в бланке
+    относятся к команде целиком (см. split_goalie_stats).
+    """
+    stmt = (
+        select(
+            Game.id,
+            Game.tournament_id,
+            GamePlayerStat.team_id,
+            Game.team_a_id,
+            Game.score_a,
+            Game.score_b,
+            Game.shots_a,
+            Game.shots_b,
+            Tournament.period_minutes,
+            Tournament.periods_count,
+        )
+        .join(Game, Game.id == GamePlayerStat.game_id)
+        .join(Tournament, Tournament.id == Game.tournament_id)
+        .where(
+            GamePlayerStat.player_id == player_id,
+            GamePlayerStat.is_goalie.is_(True),
+            Game.score_a.is_not(None),
+            Game.score_b.is_not(None),
+        )
+    )
+    if tournament_id is not None:
+        stmt = stmt.where(Game.tournament_id == tournament_id)
+    if team_id is not None:
+        stmt = stmt.where(GamePlayerStat.team_id == team_id)
+    rows = (await session.execute(stmt)).all()
+
+    career = GoalieAccumulator()
+    by_tournament: dict[uuid.UUID, GoalieAccumulator] = {}
+    by_team: dict[uuid.UUID, GoalieAccumulator] = {}
+    if not rows:
+        return career, by_tournament, by_team
+
+    # Сколько вратарей было у команды в каждом из этих матчей.
+    counts_stmt = (
+        select(GamePlayerStat.game_id, GamePlayerStat.team_id, func.count(GamePlayerStat.id))
+        .where(
+            GamePlayerStat.game_id.in_([r[0] for r in rows]),
+            GamePlayerStat.is_goalie.is_(True),
+        )
+        .group_by(GamePlayerStat.game_id, GamePlayerStat.team_id)
+    )
+    goalie_counts = {
+        (gid, tid): int(cnt) for gid, tid, cnt in (await session.execute(counts_stmt)).all()
+    }
+
+    for (
+        game_id,
+        tour_id,
+        own_team_id,
+        team_a_id,
+        score_a,
+        score_b,
+        shots_a,
+        shots_b,
+        period_minutes,
+        periods_count,
+    ) in rows:
+        targets = [
+            career,
+            by_tournament.setdefault(tour_id, GoalieAccumulator()),
+            by_team.setdefault(own_team_id, GoalieAccumulator()),
+        ]
+        if goalie_counts.get((game_id, own_team_id), 0) != 1:
+            for acc in targets:
+                acc.games_ambiguous += 1
+            continue
+
+        is_home = own_team_id == team_a_id
+        conceded = score_b if is_home else score_a
+        opp_shots = shots_b if is_home else shots_a
+        saves = None if opp_shots is None else max(opp_shots - conceded, 0)
+        minutes = (
+            period_minutes * periods_count if period_minutes and periods_count else 0
+        )
+        for acc in targets:
+            acc.goals_against += conceded
+            if saves is None:
+                acc.saves_known = False
+            else:
+                acc.saves += saves
+            acc.minutes_played += minutes
+
+    return career, by_tournament, by_team
+
+
 @dataclass
 class CareerTotals:
     games: int = 0
     goals: int = 0
     assists: int = 0
+    # Вратарские: None у полевых игроков и там, где табло не даёт их распределить.
+    goals_against: int | None = None
+    saves: int | None = None
+    minutes_played: int | None = None
 
     @property
     def points(self) -> int:
@@ -468,6 +572,26 @@ async def player_breakdown(
         (tid, name, CareerTotals(games=g, goals=go, assists=a))
         for tid, name, g, go, a in (await session.execute(by_team_stmt)).all()
     ]
+
+    # Вратарские считаются из табло отдельным проходом и подмешиваются в те же блоки.
+    g_career, g_by_tour, g_by_team = await goalie_totals_for_player(
+        session,
+        player_id,
+        tournament_id=tournament_id,
+        team_id=team_id,
+    )
+
+    def _apply(totals: CareerTotals, acc: GoalieAccumulator | None) -> CareerTotals:
+        if acc is None or (acc.goals_against == 0 and acc.minutes_played == 0):
+            return totals
+        totals.goals_against = acc.goals_against
+        totals.saves = acc.saves if acc.saves_known else None
+        totals.minutes_played = acc.minutes_played or None
+        return totals
+
+    _apply(career, g_career)
+    by_tournament = [(i, n, _apply(t, g_by_tour.get(i))) for i, n, t in by_tournament]
+    by_team = [(i, n, _apply(t, g_by_team.get(i))) for i, n, t in by_team]
 
     return PlayerBreakdown(
         player=player,
