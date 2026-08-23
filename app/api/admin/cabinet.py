@@ -24,7 +24,9 @@ from app.repositories import news_posts as news_repo
 from app.repositories import questions as questions_repo
 from app.repositories import reviews as reviews_repo
 from app.repositories import service_requests as service_requests_repo
+from app.repositories import games as games_repo
 from app.repositories import teams as teams_repo
+from app.repositories import tournament_players as roster_repo
 from app.repositories import tournament_applications as tournament_apps_repo
 from app.repositories import tournaments as tournaments_repo
 from app.schemas.admin import (
@@ -551,6 +553,44 @@ async def _validate_and_normalize_teams(
     return deduped
 
 
+async def _guard_removed_teams(
+    session: AsyncSession,
+    tournament_id: uuid.UUID,
+    keep_team_ids: set[uuid.UUID],
+) -> None:
+    """Запретить убирать из турнира команду, у которой есть матчи или заявленные игроки.
+
+    Без этой проверки удаление связи упало бы либо на RESTRICT от games (500),
+    либо молча снесло бы заявку каскадом. Здесь — понятная 409.
+    """
+    existing = await tournaments_repo.get_by_id(session, tournament_id)
+    if existing is None:
+        return
+    removed = {link.team_id for link in existing.team_links} - keep_team_ids
+    if not removed:
+        return
+
+    blocked_by_games = removed & await games_repo.team_ids_with_games(session, tournament_id)
+    blocked_by_roster = removed & await roster_repo.list_team_ids_with_players(
+        session,
+        tournament_id,
+    )
+    blocked = blocked_by_games | blocked_by_roster
+    if not blocked:
+        return
+
+    names = {link.team_id: link.team.name for link in existing.team_links}
+    listed = ", ".join(sorted(names.get(tid, str(tid)) for tid in blocked))
+    reason = "матчи" if blocked_by_games else "заявленные игроки"
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"Нельзя убрать из турнира команды, у которых есть {reason}: {listed}. "
+            "Сначала удалите их матчи и состав."
+        ),
+    )
+
+
 def _build_tournament_item(row) -> TournamentListItem:  # noqa: ANN001 — row: Tournament
     """Собрать админский ListItem руками: данные турнира + enriched-команды с per-tournament photo."""
     return TournamentListItem(
@@ -567,6 +607,9 @@ def _build_tournament_item(row) -> TournamentListItem:  # noqa: ANN001 — row: 
         description=row.description,
         url=row.url,
         recordings_url=row.recordings_url,
+        game_format=row.game_format,
+        period_minutes=row.period_minutes,
+        periods_count=row.periods_count,
         position=row.position,
         is_visible=row.is_visible,
         teams=[
@@ -636,6 +679,7 @@ async def admin_update_tournament(
         # raw["teams"] это list[dict], а не list[модель]).
         items = [TournamentTeamInput.model_validate(t) for t in teams_raw]
         teams = await _validate_and_normalize_teams(session, items)
+        await _guard_removed_teams(session, tournament_id, {tid for tid, _ in teams})
     if "arena_id" in raw and await arenas_repo.get_by_id(session, raw["arena_id"]) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Арена не найдена")
     # Проверка start_date/end_date с учётом текущих значений

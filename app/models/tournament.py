@@ -10,6 +10,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -28,6 +29,10 @@ class TournamentTeam(Base):
     """Many-to-many tournament ↔ team с сохранением порядка + общее фото состава."""
 
     __tablename__ = "tournament_teams"
+    # Создан миграцией 0010; объявлен здесь для совпадения metadata с БД.
+    __table_args__ = (
+        Index("ix_tournament_teams_tournament_position", "tournament_id", "position"),
+    )
 
     tournament_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -49,6 +54,8 @@ class Tournament(Base):
     """Турнир из раздела /turniry."""
 
     __tablename__ = "tournaments"
+    # Создан миграцией 0010; объявлен здесь для совпадения metadata с БД.
+    __table_args__ = (Index("ix_tournaments_visible_start", "is_visible", "start_date"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -71,6 +78,10 @@ class Tournament(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     recordings_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Регламент из шапки бумажного протокола. Всё nullable — старые турниры не трогаем.
+    game_format: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    period_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    periods_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

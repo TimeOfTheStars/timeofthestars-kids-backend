@@ -38,6 +38,7 @@
             <button type="button" class="nav-tab" data-tab="reviews">Отзывы</button>
             <button type="button" class="nav-tab" data-tab="news">Новости</button>
             <button type="button" class="nav-tab" data-tab="teams">Команды</button>
+            <button type="button" class="nav-tab" data-tab="players">Игроки</button>
             <button type="button" class="nav-tab" data-tab="arenas">Арены</button>
             <button type="button" class="nav-tab" data-tab="tournaments">Турниры</button>
             <button type="button" class="nav-tab" data-tab="tournament-apps">Заявки на турнир</button>
@@ -275,6 +276,62 @@
                     </tr>
                   </thead>
                   <tbody id="teamRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-players" class="tab-panel hidden">
+            <div class="card">
+              <h1>Игроки</h1>
+              <p class="muted">Общий справочник. Номер и команда задаются в составе конкретного турнира.</p>
+              <form id="playerCreateForm" class="form form-wide">
+                <label>ФИО <input id="pcName" required maxlength="255" placeholder="Гвоздев Никита" /></label>
+                <div class="row gap fields-row">
+                  <label class="grow">Дата рождения <input id="pcBirthDate" type="date" /></label>
+                  <label class="grow">Амплуа
+                    <select id="pcPosition">
+                      <option value="">— не указано —</option>
+                      <option value="вратарь">вратарь</option>
+                      <option value="защитник">защитник</option>
+                      <option value="нападающий">нападающий</option>
+                    </select>
+                  </label>
+                </div>
+                <label>Фото
+                  <div class="row gap upload-row">
+                    <input id="pcPhoto" class="grow" type="text" maxlength="1024" placeholder="/static/player-photos/… или https://…" />
+                    <button type="button" id="pcPhotoUploadBtn" class="btn">Загрузить файл</button>
+                    <input id="pcPhotoFile" type="file" accept="image/*" hidden />
+                  </div>
+                </label>
+                <p id="pcPhotoMsg" class="msg muted hidden"></p>
+                <button type="submit" class="btn primary">Добавить игрока</button>
+                <p id="playerCreateMsg" class="msg hidden"></p>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="row space-between">
+                <h2>Список игроков</h2>
+                <div class="row gap">
+                  <input id="playerSearch" type="search" placeholder="Поиск по ФИО" maxlength="255" />
+                  <button type="button" id="refreshPlayersBtn" class="btn">Обновить</button>
+                </div>
+              </div>
+              <p id="playersError" class="error hidden"></p>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Фото</th>
+                      <th>ФИО</th>
+                      <th>Дата рождения</th>
+                      <th>Амплуа</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="playerRows"></tbody>
                 </table>
               </div>
             </div>
@@ -566,6 +623,40 @@
       </div>
     </div>
 
+    <div id="playerEditModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card">
+        <h2>Редактировать игрока</h2>
+        <form id="playerEditForm" class="form form-wide">
+          <input type="hidden" id="peId" />
+          <label>ФИО <input id="peName" required maxlength="255" /></label>
+          <div class="row gap fields-row">
+            <label class="grow">Дата рождения <input id="peBirthDate" type="date" /></label>
+            <label class="grow">Амплуа
+              <select id="pePosition">
+                <option value="">— не указано —</option>
+                <option value="вратарь">вратарь</option>
+                <option value="защитник">защитник</option>
+                <option value="нападающий">нападающий</option>
+              </select>
+            </label>
+          </div>
+          <label>Фото
+            <div class="row gap upload-row">
+              <input id="pePhoto" class="grow" type="text" maxlength="1024" />
+              <button type="button" id="pePhotoUploadBtn" class="btn">Загрузить файл</button>
+              <input id="pePhotoFile" type="file" accept="image/*" hidden />
+            </div>
+          </label>
+          <p id="pePhotoMsg" class="msg muted hidden"></p>
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="playerEditCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="playerEditMsg" class="msg hidden"></p>
+        </form>
+      </div>
+    </div>
+
     <div id="tournamentEditModal" class="modal-backdrop hidden" aria-hidden="true">
       <div class="modal card tournament-modal">
         <h2 id="tournamentEditTitle">Новый турнир</h2>
@@ -593,6 +684,14 @@
           </label>
           <label>Ссылка (положение/регистрация) <input id="toUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
           <label>Ссылка на записи матчей <input id="toRecordingsUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
+          <fieldset class="team-picker">
+            <legend>Регламент (шапка протокола)</legend>
+            <div class="row gap fields-row">
+              <label class="grow">Формат игры <input id="toGameFormat" maxlength="16" placeholder="4-4" /></label>
+              <label class="grow">Длительность периода, мин <input id="toPeriodMinutes" type="number" min="1" max="120" placeholder="15" /></label>
+              <label class="grow">Периодов <input id="toPeriodsCount" type="number" min="1" max="10" placeholder="3" /></label>
+            </div>
+          </fieldset>
           <div class="row gap fields-row">
             <label>Позиция <input id="toPosition" type="number" min="0" max="10000" value="0" /></label>
             <label class="checkbox-row"><input type="checkbox" id="toVisible" checked /> Видим на сайте</label>

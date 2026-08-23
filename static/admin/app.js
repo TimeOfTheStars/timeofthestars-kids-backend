@@ -64,6 +64,7 @@ function setTab(name) {
   if (name === "reviews") loadReviews();
   if (name === "news") loadNews();
   if (name === "teams") loadTeams();
+  if (name === "players") loadPlayers();
   if (name === "arenas") loadArenas();
   if (name === "tournaments") loadTournaments();
   if (name === "tournament-apps") loadTournamentApps();
@@ -443,7 +444,15 @@ async function uploadTeamLogo(file) {
   return data.url;
 }
 
-function bindLogoUpload({ urlInputId, fileInputId, buttonId, statusId }) {
+async function uploadPlayerPhoto(file) {
+  const compressed = await compressImage(file, { maxDim: 800, quality: 0.9 });
+  const fd = new FormData();
+  fd.append("file", compressed);
+  const data = await apiFetch("/uploads/player-photo", { method: "POST", body: fd });
+  return data.url;
+}
+
+function bindLogoUpload({ urlInputId, fileInputId, buttonId, statusId, uploader = uploadTeamLogo, okText = "Логотип загружен." }) {
   const fileInput = $(fileInputId);
   const urlInput = $(urlInputId);
   const btn = $(buttonId);
@@ -459,9 +468,9 @@ function bindLogoUpload({ urlInputId, fileInputId, buttonId, statusId }) {
     }
     btn.disabled = true;
     try {
-      const url = await uploadTeamLogo(file);
+      const url = await uploader(file);
       urlInput.value = url;
-      if (statusEl) statusEl.textContent = "Логотип загружен.";
+      if (statusEl) statusEl.textContent = okText;
     } catch (err) {
       if (statusEl) statusEl.textContent = "Ошибка загрузки: " + err.message;
     } finally {
@@ -547,6 +556,77 @@ function openTeamEditModal(t) {
 function closeTeamEditModal() {
   show($("teamEditModal"), false);
   $("teamEditModal").setAttribute("aria-hidden", "true");
+}
+
+// ---------- Players ----------
+
+window.__playersCache = [];
+
+const POSITION_LABELS = { "вратарь": "вратарь", "защитник": "защитник", "нападающий": "нападающий" };
+
+async function loadPlayers() {
+  $("playersError").textContent = "";
+  show($("playersError"), false);
+  const rows = $("playerRows");
+  rows.innerHTML = "";
+  const q = String($("playerSearch").value || "").trim();
+  const path = q ? `/players?limit=500&search=${encodeURIComponent(q)}` : "/players?limit=500";
+  const data = await apiFetch(path);
+  window.__playersCache = data;
+  if (!data.length) {
+    rows.innerHTML = `<tr><td colspan="5" class="muted">${q ? "Ничего не найдено" : "Игроков пока нет"}</td></tr>`;
+    return;
+  }
+  for (const pl of data) {
+    const tr = document.createElement("tr");
+    const photoCell = pl.photo
+      ? `<img src="${escapeHtml(pl.photo)}" alt="" class="team-logo" />`
+      : '<span class="muted">—</span>';
+    tr.innerHTML = `
+      <td data-label="Фото">${photoCell}</td>
+      <td data-label="ФИО">${escapeHtml(pl.full_name)}</td>
+      <td data-label="Дата рождения">${pl.birth_date ? escapeHtml(fmtDate(pl.birth_date)) : '<span class="muted">—</span>'}</td>
+      <td data-label="Амплуа">${pl.position ? escapeHtml(POSITION_LABELS[pl.position] || pl.position) : '<span class="muted">—</span>'}</td>
+    `;
+    const tdAct = document.createElement("td");
+    tdAct.setAttribute("data-label", "Действие");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn";
+    editBtn.textContent = "Изменить";
+    editBtn.addEventListener("click", () => openPlayerEditModal(pl));
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(document.createTextNode(" "));
+    tdAct.appendChild(
+      makeDeleteButton(() =>
+        confirmAndDelete({
+          question: `Удалить игрока «${pl.full_name}»? Вся его статистика по всем турнирам тоже исчезнет.`,
+          request: () => apiFetch(`/players/${pl.id}`, { method: "DELETE" }),
+          onDone: loadPlayers,
+          errorTargetId: "playersError",
+        }),
+      ),
+    );
+    tr.appendChild(tdAct);
+    rows.appendChild(tr);
+  }
+}
+
+function openPlayerEditModal(pl) {
+  $("peId").value = pl.id;
+  $("peName").value = pl.full_name;
+  $("peBirthDate").value = pl.birth_date || "";
+  $("pePosition").value = pl.position || "";
+  $("pePhoto").value = pl.photo || "";
+  $("playerEditMsg").textContent = "";
+  show($("playerEditMsg"), false);
+  show($("playerEditModal"), true);
+  $("playerEditModal").setAttribute("aria-hidden", "false");
+}
+
+function closePlayerEditModal() {
+  show($("playerEditModal"), false);
+  $("playerEditModal").setAttribute("aria-hidden", "true");
 }
 
 // ---------- Arenas ----------
@@ -693,6 +773,12 @@ async function loadTournaments() {
     `;
     const tdAct = document.createElement("td");
     tdAct.setAttribute("data-label", "Действие");
+    const statsLink = document.createElement("a");
+    statsLink.className = "btn";
+    statsLink.href = `/admin/tournament.html?id=${encodeURIComponent(t.id)}`;
+    statsLink.textContent = "Статистика";
+    tdAct.appendChild(statsLink);
+    tdAct.appendChild(document.createTextNode(" "));
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "btn";
@@ -872,6 +958,9 @@ function openTournamentEditModal(t) {
   $("toDescription").value = t && t.description ? t.description : "";
   $("toUrl").value = t && t.url ? t.url : "";
   $("toRecordingsUrl").value = t && t.recordings_url ? t.recordings_url : "";
+  $("toGameFormat").value = t && t.game_format ? t.game_format : "";
+  $("toPeriodMinutes").value = t && t.period_minutes != null ? String(t.period_minutes) : "";
+  $("toPeriodsCount").value = t && t.periods_count != null ? String(t.periods_count) : "";
   $("toPosition").value = t ? String(t.position) : "0";
   $("toVisible").checked = t ? !!t.is_visible : true;
   window.__editingTeams = t && Array.isArray(t.teams)
@@ -905,6 +994,13 @@ function openEditModal(u) {
 function closeEditModal() {
   show($("editModal"), false);
   $("editModal").setAttribute("aria-hidden", "true");
+}
+
+function intOrNull(raw) {
+  const v = String(raw ?? "").trim();
+  if (!v) return null;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 function escapeHtml(s) {
@@ -1513,6 +1609,9 @@ $("tournamentEditForm").addEventListener("submit", async (e) => {
     description: String($("toDescription").value || "").trim() || null,
     url: String($("toUrl").value || "").trim() || null,
     recordings_url: String($("toRecordingsUrl").value || "").trim() || null,
+    game_format: String($("toGameFormat").value || "").trim() || null,
+    period_minutes: intOrNull($("toPeriodMinutes").value),
+    periods_count: intOrNull($("toPeriodsCount").value),
     position: Number.isFinite(position) && position >= 0 ? position : 0,
     is_visible: $("toVisible").checked,
     teams: window.__editingTeams.map((x) => ({ team_id: x.team_id, photo: x.photo })),
@@ -1699,6 +1798,102 @@ bindLogoUpload({
   fileInputId: "teLogoFile",
   buttonId: "teLogoUploadBtn",
   statusId: "teLogoMsg",
+});
+
+// ---------- Players handlers ----------
+
+bindLogoUpload({
+  urlInputId: "pcPhoto",
+  fileInputId: "pcPhotoFile",
+  buttonId: "pcPhotoUploadBtn",
+  statusId: "pcPhotoMsg",
+  uploader: uploadPlayerPhoto,
+  okText: "Фото загружено.",
+});
+bindLogoUpload({
+  urlInputId: "pePhoto",
+  fileInputId: "pePhotoFile",
+  buttonId: "pePhotoUploadBtn",
+  statusId: "pePhotoMsg",
+  uploader: uploadPlayerPhoto,
+  okText: "Фото загружено.",
+});
+
+$("refreshPlayersBtn").addEventListener("click", async () => {
+  try { await loadPlayers(); }
+  catch (err) { $("playersError").textContent = err.message; show($("playersError"), true); }
+});
+
+let _playerSearchTimer = null;
+$("playerSearch").addEventListener("input", () => {
+  clearTimeout(_playerSearchTimer);
+  _playerSearchTimer = setTimeout(async () => {
+    try { await loadPlayers(); }
+    catch (err) { $("playersError").textContent = err.message; show($("playersError"), true); }
+  }, 300);
+});
+
+$("playerCreateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("playerCreateMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const full_name = String($("pcName").value || "").trim();
+  if (!full_name) {
+    msg.textContent = "ФИО обязательно.";
+    show(msg, true);
+    return;
+  }
+  try {
+    await apiFetch("/players", {
+      method: "POST",
+      body: JSON.stringify({
+        full_name,
+        birth_date: $("pcBirthDate").value || null,
+        position: $("pcPosition").value || null,
+        photo: String($("pcPhoto").value || "").trim() || null,
+      }),
+    });
+    $("playerCreateForm").reset();
+    show($("pcPhotoMsg"), false);
+    msg.textContent = "Игрок добавлен.";
+    show(msg, true);
+    await loadPlayers();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
+});
+
+$("playerEditCancelBtn").addEventListener("click", () => requestModalClose(closePlayerEditModal));
+
+$("playerEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("playerEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const full_name = String($("peName").value || "").trim();
+  if (!full_name) {
+    msg.textContent = "ФИО обязательно.";
+    show(msg, true);
+    return;
+  }
+  try {
+    await apiFetch(`/players/${$("peId").value}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        full_name,
+        birth_date: $("peBirthDate").value || null,
+        position: $("pePosition").value || null,
+        photo: String($("pePhoto").value || "").trim() || null,
+      }),
+    });
+    closePlayerEditModal();
+    await loadPlayers();
+  } catch (err) {
+    msg.textContent = err.message;
+    show(msg, true);
+  }
 });
 
 // ---------- Arenas handlers ----------

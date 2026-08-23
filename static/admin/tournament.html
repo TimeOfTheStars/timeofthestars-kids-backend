@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Статистика турнира</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">Кабинет</div>
+      <div class="user-bar">
+        <a class="btn ghost" href="/admin/">← К турнирам</a>
+      </div>
+    </header>
+
+    <main>
+      <section id="authError" class="login-wrap hidden">
+        <div class="card login-card">
+          <h1>Нужен вход</h1>
+          <p class="muted">Сессия не найдена или истекла.</p>
+          <a class="btn primary" href="/admin/">Войти</a>
+        </div>
+      </section>
+
+      <section id="content" class="hidden">
+        <div class="card">
+          <div class="row space-between">
+            <h1 id="tTitle">Турнир</h1>
+            <span id="tMeta" class="muted"></span>
+          </div>
+          <p id="topError" class="error hidden"></p>
+          <p id="regulationHint" class="msg muted hidden"></p>
+        </div>
+
+        <!-- ------------------------------- Составы ------------------------------- -->
+        <div class="card">
+          <div class="row space-between">
+            <h2>Составы</h2>
+            <button type="button" id="refreshRosterBtn" class="btn">Обновить</button>
+          </div>
+          <p id="rosterError" class="error hidden"></p>
+          <div id="rosterByTeam"></div>
+        </div>
+
+        <!-- -------------------------------- Матчи -------------------------------- -->
+        <div class="card">
+          <h2>Новый матч</h2>
+          <form id="gameCreateForm" class="form form-wide">
+            <div class="row gap fields-row">
+              <label class="grow">Команда 1 <select id="gcTeamA" required></select></label>
+              <label class="grow">Команда 2 <select id="gcTeamB" required></select></label>
+            </div>
+            <div class="row gap fields-row">
+              <label class="grow">Дата <input id="gcDate" type="date" required /></label>
+              <label class="grow">Время <input id="gcTime" type="time" /></label>
+              <label>МАТЧ № <input id="gcPosition" type="number" min="0" max="10000" placeholder="авто" /></label>
+            </div>
+            <fieldset class="team-picker">
+              <legend>Табло матча (можно заполнить позже)</legend>
+              <div class="row gap fields-row">
+                <label class="grow">Голы — команда 1 <input id="gcScoreA" type="number" min="0" max="99" /></label>
+                <label class="grow">Голы — команда 2 <input id="gcScoreB" type="number" min="0" max="99" /></label>
+                <label class="grow">Броски — команда 1 <input id="gcShotsA" type="number" min="0" max="999" /></label>
+                <label class="grow">Броски — команда 2 <input id="gcShotsB" type="number" min="0" max="999" /></label>
+              </div>
+            </fieldset>
+            <label>Ссылка на видео <input id="gcVideoUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
+            <label>Скан протокола
+              <div class="row gap upload-row">
+                <input id="gcScan" class="grow" type="text" maxlength="1024" placeholder="/static/protocols/… или https://…" />
+                <button type="button" id="gcScanUploadBtn" class="btn">Загрузить файл</button>
+                <input id="gcScanFile" type="file" accept="image/*,application/pdf" hidden />
+              </div>
+            </label>
+            <p id="gcScanMsg" class="msg muted hidden"></p>
+            <button type="submit" class="btn primary">Добавить матч</button>
+            <p id="gameCreateMsg" class="msg hidden"></p>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="row space-between">
+            <h2>Матчи</h2>
+            <button type="button" id="refreshGamesBtn" class="btn">Обновить</button>
+          </div>
+          <p id="gamesError" class="error hidden"></p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>№</th>
+                  <th>Дата</th>
+                  <th>Команды</th>
+                  <th>Голы</th>
+                  <th>Броски</th>
+                  <th>Статус</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="gameRows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ------------------------------ Таблица ------------------------------ -->
+        <div class="card">
+          <div class="row space-between">
+            <h2>Таблица</h2>
+            <button type="button" id="refreshStandingsBtn" class="btn">Обновить</button>
+          </div>
+          <p class="muted">Считается на лету по всем матчам с заполненным счётом. Победа — 2 очка, ничья — 1.</p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>#</th><th>Команда</th><th>И</th><th>В</th><th>Н</th><th>П</th>
+                  <th>Заб.</th><th>Проп.</th><th>Разн.</th><th>Очки</th>
+                </tr>
+              </thead>
+              <tbody id="standingRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ------------------ Модалка: добавить игроков в состав ------------------ -->
+    <div id="rosterAddModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card tournament-modal">
+        <h2 id="rosterAddTitle">Добавить игроков</h2>
+        <p class="muted">Отметьте игроков и при необходимости укажите номера. Уже заявленные не показаны.</p>
+        <div class="row gap">
+          <input id="rosterAddSearch" class="grow" type="search" placeholder="Поиск по ФИО" />
+        </div>
+        <ol id="rosterAddList" class="team-list"></ol>
+        <div class="row gap">
+          <button type="button" id="rosterAddSaveBtn" class="btn primary">Заявить отмеченных</button>
+          <button type="button" id="rosterAddCancelBtn" class="btn">Отмена</button>
+        </div>
+        <p id="rosterAddMsg" class="msg hidden"></p>
+      </div>
+    </div>
+
+    <!-- --------------------------- Модалка: протокол --------------------------- -->
+    <div id="protocolModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card protocol-modal">
+        <div class="row space-between">
+          <h2 id="protocolTitle">Протокол матча</h2>
+          <span id="protocolRegulation" class="muted"></span>
+        </div>
+
+        <fieldset class="team-picker">
+          <legend>Табло матча</legend>
+          <div class="row gap fields-row">
+            <label class="grow"><span id="prLabelGoalsA">Голы — команда 1</span> <input id="prScoreA" type="number" min="0" max="99" /></label>
+            <label class="grow"><span id="prLabelGoalsB">Голы — команда 2</span> <input id="prScoreB" type="number" min="0" max="99" /></label>
+            <label class="grow"><span id="prLabelShotsA">Броски — команда 1</span> <input id="prShotsA" type="number" min="0" max="999" /></label>
+            <label class="grow"><span id="prLabelShotsB">Броски — команда 2</span> <input id="prShotsB" type="number" min="0" max="999" /></label>
+          </div>
+          <p id="prMismatch" class="error hidden"></p>
+        </fieldset>
+
+        <div class="protocol-grid">
+          <div class="protocol-side">
+            <h3 id="prTeamAName">Команда 1</h3>
+            <div id="prLineupA" class="lineup"></div>
+            <h4>Взятие ворот</h4>
+            <div class="table-wrap">
+              <table class="table goals-table">
+                <thead>
+                  <tr><th>№</th><th>Период</th><th>Время</th><th>Г(ГОЛ)</th><th>П(ПАС)</th><th></th></tr>
+                </thead>
+                <tbody id="prGoalsA"></tbody>
+              </table>
+            </div>
+            <button type="button" class="btn" data-add-goal="a">Добавить гол</button>
+            <p id="prGoalieA" class="msg muted hidden"></p>
+          </div>
+
+          <div class="protocol-side">
+            <h3 id="prTeamBName">Команда 2</h3>
+            <div id="prLineupB" class="lineup"></div>
+            <h4>Взятие ворот</h4>
+            <div class="table-wrap">
+              <table class="table goals-table">
+                <thead>
+                  <tr><th>№</th><th>Период</th><th>Время</th><th>Г(ГОЛ)</th><th>П(ПАС)</th><th></th></tr>
+                </thead>
+                <tbody id="prGoalsB"></tbody>
+              </table>
+            </div>
+            <button type="button" class="btn" data-add-goal="b">Добавить гол</button>
+            <p id="prGoalieB" class="msg muted hidden"></p>
+          </div>
+        </div>
+
+        <div class="row gap">
+          <button type="button" id="protocolSaveBtn" class="btn primary">Сохранить протокол</button>
+          <button type="button" id="protocolCancelBtn" class="btn">Закрыть</button>
+        </div>
+        <p id="protocolMsg" class="msg hidden"></p>
+      </div>
+    </div>
+
+    <script src="/admin/tournament.js"></script>
+  </body>
+</html>

@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.core.urls import absolutize
 from app.db.session import get_db_session
 from app.models.tournament import Tournament
+from app.repositories import games as games_repo
 from app.repositories import tournaments as tournaments_repo
 from app.schemas.tournament import ArenaPublic, TeamPublic, TournamentPublic
 
@@ -23,7 +24,7 @@ def _derive_season(start: date) -> str:
     return f"{start.year - 1}/{start.year}"
 
 
-def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
+def _to_public(row: Tournament, base: str | None, *, has_stats: bool = False) -> TournamentPublic:
     season = row.season or _derive_season(row.start_date)
     return TournamentPublic(
         id=str(row.id),
@@ -44,6 +45,10 @@ def _to_public(row: Tournament, base: str | None) -> TournamentPublic:
         description=row.description,
         url=row.url,
         recordings_url=row.recordings_url,
+        game_format=row.game_format,
+        period_minutes=row.period_minutes,
+        periods_count=row.periods_count,
+        has_stats=has_stats,
         teams=[
             TeamPublic(
                 name=link.team.name,
@@ -69,4 +74,6 @@ async def list_tournaments(
     rows = await tournaments_repo.list_visible(session)
     response.headers["Cache-Control"] = "public, max-age=300"
     base = settings.public_base_url
-    return [_to_public(r, base) for r in rows]
+    # Одним запросом на все турниры — иначе был бы N+1 по числу турниров.
+    finished = await games_repo.finished_counts_by_tournament(session)
+    return [_to_public(r, base, has_stats=finished.get(r.id, 0) > 0) for r in rows]

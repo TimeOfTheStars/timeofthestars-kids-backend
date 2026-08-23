@@ -17,3 +17,7 @@ static/teams/*
 !static/teams/.gitkeep
 static/team-photos/*
 !static/team-photos/.gitkeep
+static/player-photos/*
+!static/player-photos/.gitkeep
+static/protocols/*
+!static/protocols/.gitkeep

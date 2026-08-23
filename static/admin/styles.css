@@ -534,3 +534,79 @@ textarea {
     max-width: 100%;
   }
 }
+
+/* ---------- Экран статистики турнира (tournament.html) ---------- */
+
+.protocol-modal {
+  max-width: 1200px;
+  width: 96vw;
+}
+
+.protocol-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 12px 0;
+}
+
+@media (max-width: 900px) {
+  .protocol-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.protocol-side h3 {
+  margin: 0 0 8px;
+}
+
+.protocol-side h4 {
+  margin: 14px 0 6px;
+  font-size: 0.95rem;
+}
+
+.lineup {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.lineup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.lineup-row .lineup-num {
+  min-width: 2.6em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lineup-row .lineup-name {
+  flex: 1;
+}
+
+.goals-table input {
+  width: 100%;
+  min-width: 3.5em;
+  box-sizing: border-box;
+}
+
+.goals-table td {
+  padding: 4px 6px;
+}
+
+.goals-table .bad {
+  outline: 2px solid var(--danger);
+}
+
+.roster-team {
+  margin-bottom: 18px;
+}
+
+.roster-team .row.space-between {
+  margin-bottom: 6px;
+}

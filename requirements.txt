@@ -10,3 +10,6 @@ python-dotenv>=1.0.1,<2.0.0
 bcrypt>=4.0.0,<5.0.0
 PyJWT>=2.9.0,<3.0.0
 python-multipart>=0.0.12,<1.0.0
+
+# Тесты (unit, без БД): pytest tests/
+pytest>=8.3.0,<9.0.0

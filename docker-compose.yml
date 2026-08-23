@@ -41,6 +41,8 @@ services:
     volumes:
       - ./static/teams:/app/static/teams
       - ./static/team-photos:/app/static/team-photos
+      - ./static/player-photos:/app/static/player-photos
+      - ./static/protocols:/app/static/protocols
     command: >
       sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
 

@@ -10,12 +10,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import app.models  # noqa: F401 — регистрирует ВСЕ модели в Base.metadata
 from app.core.config import get_settings
 from app.db.base import Base
-from app.models.admin_user import AdminUser  # noqa: F401 — register metadata
-from app.models.appointment import Appointment  # noqa: F401 — register metadata
-from app.models.question_request import QuestionRequest  # noqa: F401 — register metadata
-from app.models.service_request import ServiceRequest  # noqa: F401 — register metadata
 
 config = context.config
 

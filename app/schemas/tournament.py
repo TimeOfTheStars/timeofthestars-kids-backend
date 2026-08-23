@@ -52,6 +52,12 @@ class TournamentPublic(BaseModel):
     description: str | None = None
     url: str | None = None
     recordings_url: str | None = Field(default=None, serialization_alias="recordingsUrl")
+    game_format: str | None = Field(default=None, serialization_alias="gameFormat")
+    period_minutes: int | None = Field(default=None, serialization_alias="periodMinutes")
+    periods_count: int | None = Field(default=None, serialization_alias="periodsCount")
+    # Есть ли у турнира хотя бы один сыгранный матч — фронт по этому флагу решает,
+    # показывать ли блок статистики, не делая лишний запрос.
+    has_stats: bool = Field(default=False, serialization_alias="hasStats")
     teams: list[TeamPublic] = []
 
     @field_serializer("start_time", "end_time")
@@ -169,6 +175,9 @@ class TournamentListItem(BaseModel):
     description: str | None
     url: str | None
     recordings_url: str | None
+    game_format: str | None
+    period_minutes: int | None
+    periods_count: int | None
     position: int
     is_visible: bool
     teams: list[TournamentTeamAdminItem]
@@ -195,6 +204,9 @@ class TournamentCreate(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     url: str | None = Field(default=None, max_length=1024)
     recordings_url: str | None = Field(default=None, max_length=1024)
+    game_format: str | None = Field(default=None, max_length=16)
+    period_minutes: int | None = Field(default=None, ge=1, le=120)
+    periods_count: int | None = Field(default=None, ge=1, le=10)
     position: int = Field(default=0, ge=0, le=10_000)
     is_visible: bool = True
     teams: list[TournamentTeamInput] = Field(default_factory=list)
@@ -207,7 +219,7 @@ class TournamentCreate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("season", "description", "url", "recordings_url", "birth_year")
+    @field_validator("season", "description", "url", "recordings_url", "birth_year", "game_format")
     @classmethod
     def _blank_to_none(cls, v: str | None) -> str | None:
         if v is None:
@@ -231,6 +243,9 @@ class TournamentUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     url: str | None = Field(default=None, max_length=1024)
     recordings_url: str | None = Field(default=None, max_length=1024)
+    game_format: str | None = Field(default=None, max_length=16)
+    period_minutes: int | None = Field(default=None, ge=1, le=120)
+    periods_count: int | None = Field(default=None, ge=1, le=10)
     position: int | None = Field(default=None, ge=0, le=10_000)
     is_visible: bool | None = None
     teams: list[TournamentTeamInput] | None = None
@@ -245,7 +260,7 @@ class TournamentUpdate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("season", "description", "url", "recordings_url", "birth_year")
+    @field_validator("season", "description", "url", "recordings_url", "birth_year", "game_format")
     @classmethod
     def _blank_to_none(cls, v: str | None) -> str | None:
         if v is None:

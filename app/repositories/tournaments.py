@@ -17,6 +17,13 @@ def _with_teams() -> Any:
     return selectinload(Tournament.team_links).selectinload(TournamentTeam.team)
 
 
+# В проекте expire_on_commit=False, поэтому объект из identity map при повторном
+# select сохранил бы ранее загруженную коллекцию team_links — вместе с её прежним
+# порядком. После правки position это отдавало бы старый порядок команд, хотя в БД
+# всё верно. populate_existing перезагружает коллекцию с актуальным ORDER BY.
+_FRESH = {"populate_existing": True}
+
+
 async def list_visible(session: AsyncSession, *, limit: int = 500) -> list[Tournament]:
     stmt = (
         select(Tournament)
@@ -51,21 +58,41 @@ async def get_by_id(session: AsyncSession, tournament_id: uuid.UUID) -> Tourname
         select(Tournament)
         .where(Tournament.id == tournament_id)
         .options(_with_teams())
+        .execution_options(**_FRESH)
     )
     result = await session.execute(stmt)
     return result.scalars().unique().one_or_none()
 
 
-def _replace_team_links(
+def _sync_team_links(
     tournament: Tournament,
     teams: list[tuple[uuid.UUID, str | None]],
 ) -> None:
-    """Полностью переписать team_links согласно порядку (team_id, photo)."""
-    tournament.team_links.clear()
+    """Привести team_links к списку (team_id, photo), НЕ пересоздавая уцелевшие связи.
+
+    Раньше здесь был clear() + append(), то есть физический DELETE+INSERT всех строк
+    tournament_teams на каждое сохранение турнира (админка всегда присылает полный
+    массив команд). На пару (tournament_id, team_id) теперь ссылаются заявка игроков
+    (ON DELETE CASCADE) и матчи (ON DELETE RESTRICT), поэтому пересоздание либо
+    снесло бы заявку, либо упало бы на FK. Обновляем на месте: удаляем только
+    исчезнувшие команды, вставляем только новые, остальным правим position/photo.
+    """
+    existing = {link.team_id: link for link in tournament.team_links}
+    wanted = {tid for tid, _ in teams}
+
+    for link in list(tournament.team_links):
+        if link.team_id not in wanted:
+            tournament.team_links.remove(link)
+
     for pos, (tid, photo) in enumerate(teams):
-        tournament.team_links.append(
-            TournamentTeam(team_id=tid, position=pos, photo=photo),
-        )
+        link = existing.get(tid)
+        if link is None:
+            tournament.team_links.append(
+                TournamentTeam(team_id=tid, position=pos, photo=photo),
+            )
+        else:
+            link.position = pos
+            link.photo = photo
 
 
 async def create_one(
@@ -104,7 +131,7 @@ async def update_one(
     for key, value in fields.items():
         setattr(row, key, value)
     if teams is not None:
-        _replace_team_links(row, teams)
+        _sync_team_links(row, teams)
     await session.commit()
     return await get_by_id(session, tournament_id)
 
