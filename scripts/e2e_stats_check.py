@@ -352,6 +352,19 @@ async def phase_guards() -> None:
                           json={"team_a_id": impuls["id"], "team_b_id": iskra["id"]})
         check("смена команд отклонена", r.status_code, 409)
 
+        print("\n--- 10. скан правится у матча с заполненным протоколом ---")
+        # Форма правки всегда присылает team_a_id/team_b_id. Защита обязана смотреть
+        # на факт СМЕНЫ команд, иначе правка одного скана упирается в 409.
+        r = await c.patch(f"/api/admin/games/{G['id']}", headers=H, json={
+            "team_a_id": iskra["id"], "team_b_id": impuls["id"],
+            "scan": "/static/protocols/исправленный.pdf"})
+        check("правка скана прошла", r.status_code, 200)
+        check("скан записан", r.json()["scan"], "/static/protocols/исправленный.pdf")
+        r = await c.patch(f"/api/admin/games/{G['id']}", headers=H, json={"scan": None})
+        check("скан снимается", (r.status_code, r.json()["scan"]), (200, None))
+        pr = (await c.get(f"/api/admin/games/{G['id']}/protocol", headers=H)).json()
+        check("протокол не пострадал", len(pr["stat_lines"]), 26)
+
 
 
 

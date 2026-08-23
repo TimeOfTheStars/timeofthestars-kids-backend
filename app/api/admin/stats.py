@@ -341,7 +341,11 @@ async def admin_update_game(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Команда не может играть сама с собой",
         )
-    if "team_a_id" in raw or "team_b_id" in raw:
+    # Проверяем факт СМЕНЫ команд, а не наличие полей в запросе: форма правки
+    # присылает team_a_id/team_b_id всегда, и на присутствии ключа защита срабатывала
+    # даже когда правят только скан или счёт.
+    teams_changed = new_a != game.team_a_id or new_b != game.team_b_id
+    if teams_changed:
         tournament = await _require_tournament(session, game.tournament_id)
         tournament_team_ids = {link.team_id for link in tournament.team_links}
         for label, team_id in (("Команда 1", new_a), ("Команда 2", new_b)):
