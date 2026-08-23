@@ -3,7 +3,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,6 +26,10 @@ class NewsPost(Base):
     __tablename__ = "news_posts"
     __table_args__ = (
         UniqueConstraint("vk_owner_id", "vk_post_id", name="ux_news_posts_owner_post"),
+        # Индексы созданы миграциями 0009 и 0013; объявлены здесь, чтобы metadata
+        # совпадала с БД и autogenerate не предлагал их удалить.
+        Index("ix_news_posts_visible_position_created", "is_visible", "position", "created_at"),
+        Index("ix_news_posts_visible_position_vkdate", "is_visible", "position", "vk_post_date"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

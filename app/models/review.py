@@ -3,7 +3,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +24,16 @@ class Review(Base):
     """Отзыв с фронта; источник — комментарий в обсуждении VK или ручной ввод в админке."""
 
     __tablename__ = "reviews"
+    __table_args__ = (
+        # Созданы миграцией 0008; объявлены здесь для совпадения metadata с БД.
+        Index(
+            "ux_reviews_vk_comment_id",
+            "vk_comment_id",
+            unique=True,
+            postgresql_where=text("vk_comment_id IS NOT NULL"),
+        ),
+        Index("ix_reviews_visible_position", "is_visible", "position"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
