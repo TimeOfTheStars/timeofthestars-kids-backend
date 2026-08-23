@@ -291,18 +291,22 @@ async function renderRosterAddList() {
 
 /* --------------------------------- матчи --------------------------------- */
 
+function fillTeamSelect(id, selectedId) {
+  const sel = $(id);
+  sel.innerHTML = "";
+  for (const t of teamsOfTournament()) {
+    const o = document.createElement("option");
+    o.value = t.id;
+    o.textContent = t.name;
+    sel.appendChild(o);
+  }
+  if (selectedId) sel.value = selectedId;
+}
+
 function renderTeamSelects() {
   const teams = teamsOfTournament();
-  for (const id of ["gcTeamA", "gcTeamB"]) {
-    const sel = $(id);
-    sel.innerHTML = "";
-    for (const t of teams) {
-      const o = document.createElement("option");
-      o.value = t.id;
-      o.textContent = t.name;
-      sel.appendChild(o);
-    }
-  }
+  fillTeamSelect("gcTeamA");
+  fillTeamSelect("gcTeamB");
   if (teams.length > 1) $("gcTeamB").value = teams[1].id;
 }
 
@@ -312,7 +316,7 @@ async function loadGames() {
   const rows = $("gameRows");
   rows.innerHTML = "";
   if (!state.games.length) {
-    rows.innerHTML = '<tr><td colspan="7" class="muted">Матчей пока нет</td></tr>';
+    rows.innerHTML = '<tr><td colspan="8" class="muted">Матчей пока нет</td></tr>';
     return;
   }
   for (const g of state.games) {
@@ -327,8 +331,20 @@ async function loadGames() {
       <td data-label="Голы">${escapeHtml(score)}</td>
       <td data-label="Броски">${escapeHtml(shots)}</td>
       <td data-label="Статус">${g.is_finished ? "сыгран" : "не сыгран"}</td>
+      <td data-label="Скан">${
+        g.scan
+          ? `<a href="${escapeHtml(g.scan)}" target="_blank" rel="noopener">открыть</a>`
+          : '<span class="muted">—</span>'
+      }</td>
     `;
     const tdAct = document.createElement("td");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn btn-small";
+    editBtn.textContent = "Изменить";
+    editBtn.addEventListener("click", () => openGameEditModal(g));
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(document.createTextNode(" "));
     const protoBtn = document.createElement("button");
     protoBtn.type = "button";
     protoBtn.className = "btn primary btn-small";
@@ -381,6 +397,52 @@ async function loadStandings() {
     `;
     rows.appendChild(tr);
   }
+}
+
+/* --------------------------- правка матча --------------------------- */
+
+function openGameEditModal(g) {
+  $("geId").value = g.id;
+  $("gameEditTitle").textContent =
+    `МАТЧ № ${g.position} · ${g.team_a.name} — ${g.team_b.name}`;
+  fillTeamSelect("geTeamA", g.team_a.id);
+  fillTeamSelect("geTeamB", g.team_b.id);
+  $("geDate").value = g.date;
+  $("geTime").value = g.time ? String(g.time).slice(0, 5) : "";
+  $("gePosition").value = String(g.position);
+  $("geScoreA").value = g.score_a ?? "";
+  $("geScoreB").value = g.score_b ?? "";
+  $("geShotsA").value = g.shots_a ?? "";
+  $("geShotsB").value = g.shots_b ?? "";
+  $("geVideoUrl").value = g.video_url || "";
+  $("geScan").value = g.scan || "";
+  $("geLabelGoalsA").textContent = `Голы — ${g.team_a.name}`;
+  $("geLabelGoalsB").textContent = `Голы — ${g.team_b.name}`;
+  $("geLabelShotsA").textContent = `Броски — ${g.team_a.name}`;
+  $("geLabelShotsB").textContent = `Броски — ${g.team_b.name}`;
+  renderScanPreview();
+  $("gameEditMsg").textContent = "";
+  show($("gameEditMsg"), false);
+  show($("geScanMsg"), false);
+  show($("gameEditModal"), true);
+  $("gameEditModal").setAttribute("aria-hidden", "false");
+}
+
+function closeGameEditModal() {
+  show($("gameEditModal"), false);
+  $("gameEditModal").setAttribute("aria-hidden", "true");
+}
+
+/** Ссылка на текущий скан рядом с полем — чтобы было видно, что он приложен. */
+function renderScanPreview() {
+  const el = $("geScanPreview");
+  const url = String($("geScan").value || "").trim();
+  if (!url) {
+    show(el, false);
+    return;
+  }
+  el.innerHTML = `Приложено: <a href="${escapeHtml(url)}" target="_blank" rel="noopener">открыть скан</a>`;
+  show(el, true);
 }
 
 /* ------------------------------- протокол ------------------------------- */
@@ -831,23 +893,81 @@ $("refreshRosterBtn").addEventListener("click", () => loadRoster().catch((e) => 
 $("refreshGamesBtn").addEventListener("click", () => loadGames().catch((e) => fail("gamesError", e)));
 $("refreshStandingsBtn").addEventListener("click", () => loadStandings().catch((e) => fail("topError", e)));
 
-$("gcScanUploadBtn").addEventListener("click", () => $("gcScanFile").click());
-$("gcScanFile").addEventListener("change", async () => {
-  const file = $("gcScanFile").files && $("gcScanFile").files[0];
-  if (!file) return;
-  const status = $("gcScanMsg");
-  status.textContent = "Загрузка…";
-  show(status, true);
+function bindScanUpload({ btnId, fileId, urlId, msgId, onDone }) {
+  $(btnId).addEventListener("click", () => $(fileId).click());
+  $(fileId).addEventListener("change", async () => {
+    const file = $(fileId).files && $(fileId).files[0];
+    if (!file) return;
+    const status = $(msgId);
+    status.textContent = "Загрузка…";
+    show(status, true);
+    $(btnId).disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const data = await apiFetch("/uploads/game-scan", { method: "POST", body: fd });
+      $(urlId).value = data.url;
+      status.textContent = "Скан загружен. Не забудьте сохранить.";
+      if (onDone) onDone();
+    } catch (err) {
+      status.textContent = "Ошибка загрузки: " + err.message;
+    } finally {
+      $(btnId).disabled = false;
+      $(fileId).value = "";
+    }
+  });
+}
+
+bindScanUpload({
+  btnId: "gcScanUploadBtn", fileId: "gcScanFile",
+  urlId: "gcScan", msgId: "gcScanMsg",
+});
+bindScanUpload({
+  btnId: "geScanUploadBtn", fileId: "geScanFile",
+  urlId: "geScan", msgId: "geScanMsg", onDone: renderScanPreview,
+});
+
+$("geScan").addEventListener("input", renderScanPreview);
+$("gameEditCancelBtn").addEventListener("click", () => {
+  if (window.confirm("Закрыть без сохранения изменений?")) closeGameEditModal();
+});
+
+$("gameEditForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("gameEditMsg");
+  msg.textContent = "";
+  show(msg, false);
+  const intOrNull = (v) => (String(v).trim() === "" ? null : Number.parseInt(v, 10));
+  const teamA = $("geTeamA").value;
+  const teamB = $("geTeamB").value;
+  if (teamA === teamB) {
+    msg.textContent = "Команда не может играть сама с собой.";
+    show(msg, true);
+    return;
+  }
+  const payload = {
+    team_a_id: teamA,
+    team_b_id: teamB,
+    date: $("geDate").value,
+    time: $("geTime").value || null,
+    position: intOrNull($("gePosition").value),
+    score_a: intOrNull($("geScoreA").value),
+    score_b: intOrNull($("geScoreB").value),
+    shots_a: intOrNull($("geShotsA").value),
+    shots_b: intOrNull($("geShotsB").value),
+    video_url: String($("geVideoUrl").value || "").trim() || null,
+    scan: String($("geScan").value || "").trim() || null,
+  };
   try {
-    const fd = new FormData();
-    fd.append("file", file);
-    const data = await apiFetch("/uploads/game-scan", { method: "POST", body: fd });
-    $("gcScan").value = data.url;
-    status.textContent = "Скан загружен.";
+    await apiFetch(`/games/${$("geId").value}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    closeGameEditModal();
+    await Promise.all([loadGames(), loadStandings()]);
   } catch (err) {
-    status.textContent = "Ошибка загрузки: " + err.message;
-  } finally {
-    $("gcScanFile").value = "";
+    msg.textContent = err.message;
+    show(msg, true);
   }
 });
 

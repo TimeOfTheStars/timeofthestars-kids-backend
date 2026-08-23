@@ -95,6 +95,7 @@
                   <th>Голы</th>
                   <th>Броски</th>
                   <th>Статус</th>
+                  <th>Скан</th>
                   <th></th>
                 </tr>
               </thead>
@@ -139,6 +140,50 @@
           <button type="button" id="rosterAddCancelBtn" class="btn">Отмена</button>
         </div>
         <p id="rosterAddMsg" class="msg hidden"></p>
+      </div>
+    </div>
+
+    <!-- ------------------------ Модалка: правка матча ------------------------ -->
+    <div id="gameEditModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal card tournament-modal">
+        <h2 id="gameEditTitle">Матч</h2>
+        <form id="gameEditForm" class="form form-wide">
+          <input type="hidden" id="geId" />
+          <div class="row gap fields-row">
+            <label class="grow">Команда 1 <select id="geTeamA" required></select></label>
+            <label class="grow">Команда 2 <select id="geTeamB" required></select></label>
+          </div>
+          <p class="muted">Команды можно сменить только пока протокол пуст.</p>
+          <div class="row gap fields-row">
+            <label class="grow">Дата <input id="geDate" type="date" required /></label>
+            <label class="grow">Время <input id="geTime" type="time" /></label>
+            <label>МАТЧ № <input id="gePosition" type="number" min="0" max="10000" /></label>
+          </div>
+          <fieldset class="team-picker">
+            <legend>Табло матча</legend>
+            <div class="row gap fields-row">
+              <label class="grow"><span id="geLabelGoalsA">Голы — команда 1</span> <input id="geScoreA" type="number" min="0" max="99" /></label>
+              <label class="grow"><span id="geLabelGoalsB">Голы — команда 2</span> <input id="geScoreB" type="number" min="0" max="99" /></label>
+              <label class="grow"><span id="geLabelShotsA">Броски — команда 1</span> <input id="geShotsA" type="number" min="0" max="999" /></label>
+              <label class="grow"><span id="geLabelShotsB">Броски — команда 2</span> <input id="geShotsB" type="number" min="0" max="999" /></label>
+            </div>
+          </fieldset>
+          <label>Ссылка на видео <input id="geVideoUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
+          <label>Скан протокола
+            <div class="row gap upload-row">
+              <input id="geScan" class="grow" type="text" maxlength="1024" placeholder="/static/protocols/… или https://…" />
+              <button type="button" id="geScanUploadBtn" class="btn">Загрузить файл</button>
+              <input id="geScanFile" type="file" accept="image/*,application/pdf" hidden />
+            </div>
+          </label>
+          <p id="geScanMsg" class="msg muted hidden"></p>
+          <p id="geScanPreview" class="msg muted hidden"></p>
+          <div class="row gap">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" id="gameEditCancelBtn" class="btn">Отмена</button>
+          </div>
+          <p id="gameEditMsg" class="msg hidden"></p>
+        </form>
       </div>
     </div>
 
