@@ -13,14 +13,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 from app.schemas.arena import ArenaListItem
 
-
 # ----- Public (camelCase) -----
 
 
 class TeamPublic(BaseModel):
-    """{name, logo, photo} для фронта (в контексте турнира — photo это общее фото состава)."""
+    """{name, city, logo, photo} для фронта (в контексте турнира photo — общее фото состава)."""
 
     name: str
+    city: str | None = None
     logo: str | None = None
     photo: str | None = None
 
@@ -68,21 +68,59 @@ class TournamentPublic(BaseModel):
 # ----- Admin: Team -----
 
 
+class TeamCareerAdmin(BaseModel):
+    """Общая статистика команды за всю историю (админский вид)."""
+
+    tournaments: int
+    games: int
+    wins: int
+    draws: int
+    losses: int
+    goals_for: int
+    goals_against: int
+    goal_diff: int
+    points: int
+
+
 class TeamListItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """Команда для админки. Собирается вручную в роуте — из-за расчётной статистики."""
 
     id: uuid.UUID
     name: str
+    city: str | None
     logo: str | None
     description: str | None
+    # Действующие значения: расчёт, поверх которого наложены ручные переопределения.
+    stats: TeamCareerAdmin
+    # Как показатель посчитался по матчам — чтобы в кабинете было видно расхождение.
+    computed: TeamCareerAdmin
+    # Какие поля стоят руками и потому НЕ пересчитываются при новых матчах.
+    manual_fields: list[str]
     created_at: datetime
     updated_at: datetime
 
 
-class TeamCreate(BaseModel):
+class TeamStatOverrides(BaseModel):
+    """Ручные переопределения общей статистики. None — считать по матчам.
+
+    Вписанное значение заменяет расчёт целиком и само не пересчитывается.
+    Очки не переопределяются: выводятся из действующих побед и ничьих.
+    """
+
+    manual_tournaments: int | None = Field(default=None, ge=0, le=10_000)
+    manual_games: int | None = Field(default=None, ge=0, le=100_000)
+    manual_wins: int | None = Field(default=None, ge=0, le=100_000)
+    manual_draws: int | None = Field(default=None, ge=0, le=100_000)
+    manual_losses: int | None = Field(default=None, ge=0, le=100_000)
+    manual_goals_for: int | None = Field(default=None, ge=0, le=1_000_000)
+    manual_goals_against: int | None = Field(default=None, ge=0, le=1_000_000)
+
+
+class TeamCreate(TeamStatOverrides):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(..., min_length=1, max_length=255)
+    city: str | None = Field(default=None, max_length=255)
     logo: str | None = Field(default=None, max_length=1024)
     description: str | None = Field(default=None, max_length=2000)
 
@@ -94,7 +132,7 @@ class TeamCreate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("logo", "description")
+    @field_validator("city", "logo", "description")
     @classmethod
     def _logo_blank_to_none(cls, v: str | None) -> str | None:
         if v is None:
@@ -103,10 +141,11 @@ class TeamCreate(BaseModel):
         return v or None
 
 
-class TeamUpdate(BaseModel):
+class TeamUpdate(TeamStatOverrides):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    city: str | None = Field(default=None, max_length=255)
     logo: str | None = Field(default=None, max_length=1024)
     description: str | None = Field(default=None, max_length=2000)
 
@@ -120,7 +159,7 @@ class TeamUpdate(BaseModel):
             raise ValueError(msg)
         return v.strip()
 
-    @field_validator("logo", "description")
+    @field_validator("city", "logo", "description")
     @classmethod
     def _logo_blank_to_none(cls, v: str | None) -> str | None:
         if v is None:
@@ -137,6 +176,7 @@ class TournamentTeamAdminItem(BaseModel):
 
     id: uuid.UUID
     name: str
+    city: str | None = None
     logo: str | None = None
     description: str | None = None
     photo: str | None = None

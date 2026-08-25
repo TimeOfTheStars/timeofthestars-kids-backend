@@ -29,6 +29,7 @@ class GameTeamItem(BaseModel):
 
     id: uuid.UUID
     name: str
+    city: str | None = None
     logo: str | None = None
 
 
@@ -256,10 +257,11 @@ class ProtocolOut(BaseModel):
 
 
 class TeamRef(BaseModel):
-    """Команда для публичных ответов."""
+    """Команда для публичных ответов. `city` одинаков в snake_case и camelCase."""
 
     id: str
     name: str
+    city: str | None = None
     logo: str | None = None
 
 
@@ -381,3 +383,37 @@ class PlayerCareerPublic(BaseModel):
     career: StatTotalsPublic
     by_tournament: list[NamedTotalsPublic] = Field(serialization_alias="byTournament")
     by_team: list[NamedTotalsPublic] = Field(serialization_alias="byTeam")
+
+
+class TeamCareerPublic(BaseModel):
+    """Общая статистика команды за всю историю.
+
+    Отдаются только ДЕЙСТВУЮЩИЕ значения: часть из них может быть вписана вручную
+    и тогда не пересчитывается по матчам. Признак ручного ввода публично не
+    раскрывается — он нужен только кабинету.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    tournaments: int = 0
+    games: int = 0
+    wins: int = 0
+    draws: int = 0
+    losses: int = 0
+    goals_for: int = Field(default=0, serialization_alias="goalsFor")
+    goals_against: int = Field(default=0, serialization_alias="goalsAgainst")
+    goal_diff: int = Field(default=0, serialization_alias="goalDiff")
+    points: int = 0
+
+
+class TeamPublicCard(BaseModel):
+    """Команда справочника + её общая статистика."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    city: str | None = None
+    logo: str | None = None
+    description: str | None = None
+    stats: TeamCareerPublic

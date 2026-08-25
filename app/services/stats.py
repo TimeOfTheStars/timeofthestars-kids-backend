@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, distinct, func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.game import Game, GameEvent, GamePlayerStat
@@ -188,6 +188,73 @@ def derive_totals(events: list) -> dict[uuid.UUID, dict[str, int]]:  # noqa: ANN
     return totals
 
 
+# --- общая статистика команды за всю историю ---
+
+# Показатели, которые можно переопределить руками. Порядок = порядок в кабинете.
+TEAM_STAT_FIELDS = (
+    "tournaments",
+    "games",
+    "wins",
+    "draws",
+    "losses",
+    "goals_for",
+    "goals_against",
+)
+
+
+@dataclass
+class TeamCareer:
+    """Общая статистика команды по всем турнирам."""
+
+    tournaments: int = 0
+    games: int = 0
+    wins: int = 0
+    draws: int = 0
+    losses: int = 0
+    goals_for: int = 0
+    goals_against: int = 0
+
+    @property
+    def points(self) -> int:
+        """Очки от ДЕЙСТВУЮЩИХ побед и ничьих — отдельной колонкой не хранятся."""
+        return self.wins * WIN_POINTS + self.draws * DRAW_POINTS
+
+    @property
+    def goal_diff(self) -> int:
+        return self.goals_for - self.goals_against
+
+
+def apply_manual_overrides(
+    computed: TeamCareer,
+    overrides: dict[str, int | None],
+) -> tuple[TeamCareer, set[str]]:
+    """Наложить ручные значения на расчёт: (действующая статистика, ручные поля).
+
+    Семантика — ПЕРЕЗАПИСЬ: заполненное значение подменяет расчёт целиком и само
+    не пересчитывается, поэтому после новых матчей может расходиться с ними.
+    None означает «считать автоматически», то есть очистка поля возвращает расчёт.
+
+    Очки не переопределяются: они выводятся из действующих побед и ничьих, иначе
+    было бы возможно состояние, где вписанные очки противоречат вписанным победам.
+    """
+    effective = TeamCareer(**{f: getattr(computed, f) for f in TEAM_STAT_FIELDS})
+    manual: set[str] = set()
+
+    for field_name in TEAM_STAT_FIELDS:
+        value = overrides.get(field_name)
+        if value is None:
+            continue
+        setattr(effective, field_name, value)
+        manual.add(field_name)
+
+    return effective, manual
+
+
+def overrides_from_team(team: Team) -> dict[str, int | None]:
+    """Прочитать колонки manual_* команды в вид, который ждёт apply_manual_overrides."""
+    return {f: getattr(team, f"manual_{f}") for f in TEAM_STAT_FIELDS}
+
+
 # ============================================================== обвязка с SQL
 
 
@@ -212,15 +279,20 @@ async def _tournament_regulation(
     return (row[0], row[1]) if row else (None, None)
 
 
-async def _tournament_teams(session: AsyncSession, tournament_id: uuid.UUID) -> list[tuple]:
-    """Команды турнира в заданном порядке: (id, name, logo)."""
+async def _tournament_teams(session: AsyncSession, tournament_id: uuid.UUID) -> list[Team]:
+    """Команды турнира в заданном порядке — целыми объектами.
+
+    Раньше выбирались кортежи (id, name, logo), и каждое новое поле команды
+    приходилось протаскивать через compute_standings и роут. С объектом Team
+    добавление поля больше эту цепочку не задевает.
+    """
     stmt = (
-        select(Team.id, Team.name, Team.logo)
+        select(Team)
         .join(TournamentTeam, TournamentTeam.team_id == Team.id)
         .where(TournamentTeam.tournament_id == tournament_id)
         .order_by(TournamentTeam.position)
     )
-    return list((await session.execute(stmt)).all())
+    return list((await session.execute(stmt)).scalars().all())
 
 
 async def _finished_scores(session: AsyncSession, tournament_id: uuid.UUID) -> list[Game]:
@@ -248,16 +320,16 @@ def _to_game_score(g: Game) -> GameScore:
 async def compute_standings(
     session: AsyncSession,
     tournament_id: uuid.UUID,
-) -> list[tuple[StandingCore, str | None]]:
-    """Таблица турнира: список (строка, логотип команды) в порядке мест."""
+) -> list[tuple[StandingCore, Team]]:
+    """Таблица турнира: список (строка таблицы, команда) в порядке мест."""
     teams = await _tournament_teams(session, tournament_id)
-    logos = {tid: logo for tid, _, logo in teams}
+    by_id = {t.id: t for t in teams}
     games = await _finished_scores(session, tournament_id)
     rows = compute_standings_core(
-        [(tid, name) for tid, name, _ in teams],
+        [(t.id, t.name) for t in teams],
         [_to_game_score(g) for g in games],
     )
-    return [(r, logos.get(r.team_id)) for r in rows]
+    return [(r, by_id[r.team_id]) for r in rows]
 
 
 @dataclass
@@ -599,6 +671,95 @@ async def player_breakdown(
         by_tournament=by_tournament,
         by_team=by_team,
     )
+
+
+def _team_games_subquery():  # noqa: ANN202 — SQLAlchemy subquery
+    """Сыгранные матчи в виде строк на КАЖДУЮ команду.
+
+    Команда бывает и team_a, и team_b, поэтому нормализуем через UNION ALL двух
+    выборок к общему виду (team_id, tournament_id, забито, пропущено, В, Н, П).
+    Так вся общая статистика считается одним группированным запросом.
+    """
+    played = and_(Game.score_a.is_not(None), Game.score_b.is_not(None))
+
+    def side(team_col, own, opp):  # noqa: ANN001, ANN202
+        return select(
+            team_col.label("team_id"),
+            Game.tournament_id.label("tournament_id"),
+            own.label("goals_for"),
+            opp.label("goals_against"),
+            case((own > opp, 1), else_=0).label("win"),
+            case((own == opp, 1), else_=0).label("draw"),
+            case((own < opp, 1), else_=0).label("loss"),
+        ).where(played)
+
+    return union_all(
+        side(Game.team_a_id, Game.score_a, Game.score_b),
+        side(Game.team_b_id, Game.score_b, Game.score_a),
+    ).subquery()
+
+
+async def team_career_stats_bulk(
+    session: AsyncSession,
+    team_ids: list[uuid.UUID] | None = None,
+) -> dict[uuid.UUID, TeamCareer]:
+    """Рассчитанная общая статистика по всем командам одним запросом (без N+1).
+
+    Команды без сыгранных матчей в результат не попадают — вызывающий код должен
+    считать их отсутствие нулями (см. TeamCareer по умолчанию).
+    «Турниров играла» = число турниров, где есть хотя бы один матч со счётом.
+    """
+    sq = _team_games_subquery()
+    stmt = (
+        select(
+            sq.c.team_id,
+            func.count(distinct(sq.c.tournament_id)).label("tournaments"),
+            func.count().label("games"),
+            func.coalesce(func.sum(sq.c.win), 0).label("wins"),
+            func.coalesce(func.sum(sq.c.draw), 0).label("draws"),
+            func.coalesce(func.sum(sq.c.loss), 0).label("losses"),
+            func.coalesce(func.sum(sq.c.goals_for), 0).label("goals_for"),
+            func.coalesce(func.sum(sq.c.goals_against), 0).label("goals_against"),
+        )
+        .group_by(sq.c.team_id)
+    )
+    if team_ids is not None:
+        if not team_ids:
+            return {}
+        stmt = stmt.where(sq.c.team_id.in_(team_ids))
+
+    return {
+        row.team_id: TeamCareer(
+            tournaments=int(row.tournaments),
+            games=int(row.games),
+            wins=int(row.wins),
+            draws=int(row.draws),
+            losses=int(row.losses),
+            goals_for=int(row.goals_for),
+            goals_against=int(row.goals_against),
+        )
+        for row in (await session.execute(stmt)).all()
+    }
+
+
+async def team_career_stats(session: AsyncSession, team_id: uuid.UUID) -> TeamCareer:
+    """Рассчитанная статистика одной команды. Без матчей — нули."""
+    found = await team_career_stats_bulk(session, [team_id])
+    return found.get(team_id, TeamCareer())
+
+
+async def team_effective_stats(
+    session: AsyncSession,
+    teams: list[Team],
+) -> dict[uuid.UUID, tuple[TeamCareer, TeamCareer, set[str]]]:
+    """Для списка команд: (действующая, рассчитанная, множество ручных полей)."""
+    computed = await team_career_stats_bulk(session, [t.id for t in teams])
+    out: dict[uuid.UUID, tuple[TeamCareer, TeamCareer, set[str]]] = {}
+    for team in teams:
+        base = computed.get(team.id, TeamCareer())
+        effective, manual = apply_manual_overrides(base, overrides_from_team(team))
+        out[team.id] = (effective, base, manual)
+    return out
 
 
 async def goals_timeline(session: AsyncSession, game_id: uuid.UUID) -> list[GameEvent]:

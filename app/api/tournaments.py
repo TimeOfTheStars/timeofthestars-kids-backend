@@ -52,6 +52,7 @@ def _to_public(row: Tournament, base: str | None, *, has_stats: bool = False) ->
         teams=[
             TeamPublic(
                 name=link.team.name,
+                city=link.team.city,
                 logo=absolutize(link.team.logo, base),
                 photo=absolutize(link.photo, base),
             )

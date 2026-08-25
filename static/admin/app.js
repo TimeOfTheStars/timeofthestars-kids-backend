@@ -485,10 +485,13 @@ function bindLogoUpload({ urlInputId, fileInputId, buttonId, statusId, uploader 
 window.__teamsCache = [];
 
 function teamLabel(team) {
-  // Для пикера в турнире: показываем описание, если задано, иначе название.
-  const desc = team && team.description ? String(team.description).trim() : "";
-  if (desc) return desc;
-  return team ? team.name : "";
+  // Для пикера в турнире: показываем описание, если задано, иначе название,
+  // и добавляем город — без него одноимённые команды не различить.
+  if (!team) return "";
+  const desc = team.description ? String(team.description).trim() : "";
+  const base = desc || team.name;
+  const city = team.city ? String(team.city).trim() : "";
+  return city ? `${base} (${city})` : base;
 }
 
 async function loadTeams() {
@@ -499,7 +502,7 @@ async function loadTeams() {
   const data = await apiFetch("/teams?limit=500");
   window.__teamsCache = data;
   if (!data.length) {
-    rows.innerHTML = `<tr><td colspan="4" class="muted">Команд пока нет</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="12" class="muted">Команд пока нет</td></tr>`;
     return;
   }
   for (const t of data) {
@@ -510,10 +513,26 @@ async function loadTeams() {
     const descRaw = t.description ? String(t.description) : "";
     const descPreview = descRaw.length > 140 ? descRaw.slice(0, 140) + "…" : descRaw;
     const descCell = descPreview ? escapeHtml(descPreview) : '<span class="muted">—</span>';
+    // Звёздочка = значение вписано руками и не пересчитывается по матчам.
+    const manual = new Set(t.manual_fields || []);
+    const stat = (field) => {
+      const v = t.stats ? t.stats[field] : 0;
+      return manual.has(field)
+        ? `<span title="Вписано руками, расчёт: ${t.computed ? t.computed[field] : 0}"><b>${v}</b>*</span>`
+        : String(v);
+    };
     tr.innerHTML = `
       <td data-label="Лого">${logoCell}</td>
       <td data-label="Название">${escapeHtml(t.name)}</td>
-      <td data-label="Описание">${descCell}</td>
+      <td data-label="Город">${t.city ? escapeHtml(t.city) : '<span class="muted">—</span>'}</td>
+      <td data-label="Т">${stat("tournaments")}</td>
+      <td data-label="И">${stat("games")}</td>
+      <td data-label="В">${stat("wins")}</td>
+      <td data-label="Н">${stat("draws")}</td>
+      <td data-label="П">${stat("losses")}</td>
+      <td data-label="Заб">${stat("goals_for")}</td>
+      <td data-label="Проп">${stat("goals_against")}</td>
+      <td data-label="О">${t.stats ? t.stats.points : 0}</td>
     `;
     const tdAct = document.createElement("td");
     tdAct.setAttribute("data-label", "Действие");
@@ -545,8 +564,23 @@ async function loadTeams() {
 function openTeamEditModal(t) {
   $("teId").value = t.id;
   $("teName").value = t.name;
+  $("teCity").value = t.city || "";
   $("teLogo").value = t.logo || "";
   $("teDescription").value = t.description || "";
+  // Пустое поле = «считать автоматически», поэтому в placeholder кладём расчёт.
+  // Сырые manual_* в ответе не приходят, но они и не нужны: если поле помечено
+  // ручным, его вписанное значение и есть действующее в stats.
+  const manualSet = new Set(t.manual_fields || []);
+  for (const [field, inputId] of Object.entries(TEAM_STAT_INPUTS)) {
+    const el = $(inputId);
+    el.value = manualSet.has(field) ? String(t.stats[field]) : "";
+    el.placeholder = `по матчам: ${t.computed ? t.computed[field] : 0}`;
+  }
+  const c = t.computed || {};
+  $("teStatsHint").textContent =
+    `По матчам: турниров ${c.tournaments ?? 0}, игр ${c.games ?? 0}, ` +
+    `${c.wins ?? 0}-${c.draws ?? 0}-${c.losses ?? 0}, ` +
+    `шайбы ${c.goals_for ?? 0}-${c.goals_against ?? 0}, очки ${c.points ?? 0}.`;
   $("teamEditMsg").textContent = "";
   show($("teamEditMsg"), false);
   show($("teamEditModal"), true);
@@ -557,6 +591,17 @@ function closeTeamEditModal() {
   show($("teamEditModal"), false);
   $("teamEditModal").setAttribute("aria-hidden", "true");
 }
+
+// Поле статистики команды → id инпута в модалке правки.
+const TEAM_STAT_INPUTS = {
+  tournaments: "teManualTournaments",
+  games: "teManualGames",
+  wins: "teManualWins",
+  draws: "teManualDraws",
+  losses: "teManualLosses",
+  goals_for: "teManualGoalsFor",
+  goals_against: "teManualGoalsAgainst",
+};
 
 // ---------- Players ----------
 
@@ -1471,6 +1516,7 @@ $("teamCreateForm").addEventListener("submit", async (e) => {
   msg.textContent = "";
   show(msg, false);
   const name = String($("tcName").value || "").trim();
+  const city = String($("tcCity").value || "").trim();
   const logo = String($("tcLogo").value || "").trim();
   const description = String($("tcDescription").value || "").trim();
   if (!name) {
@@ -1481,7 +1527,12 @@ $("teamCreateForm").addEventListener("submit", async (e) => {
   try {
     await apiFetch("/teams", {
       method: "POST",
-      body: JSON.stringify({ name, logo: logo || null, description: description || null }),
+      body: JSON.stringify({
+        name,
+        city: city || null,
+        logo: logo || null,
+        description: description || null,
+      }),
     });
     msg.textContent = "Команда добавлена.";
     show(msg, true);
@@ -1505,8 +1556,14 @@ $("teamEditForm").addEventListener("submit", async (e) => {
   msg.textContent = "";
   show(msg, false);
   const name = String($("teName").value || "").trim();
+  const city = String($("teCity").value || "").trim();
   const logo = String($("teLogo").value || "").trim();
   const description = String($("teDescription").value || "").trim();
+  // Пустое поле → null, то есть «вернуться к расчёту».
+  const manualPayload = {};
+  for (const [field, inputId] of Object.entries(TEAM_STAT_INPUTS)) {
+    manualPayload[`manual_${field}`] = intOrNull($(inputId).value);
+  }
   if (!name) {
     msg.textContent = "Название обязательно.";
     show(msg, true);
@@ -1515,7 +1572,13 @@ $("teamEditForm").addEventListener("submit", async (e) => {
   try {
     await apiFetch(`/teams/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ name, logo: logo || null, description: description || null }),
+      body: JSON.stringify({
+        name,
+        city: city || null,
+        logo: logo || null,
+        description: description || null,
+        ...manualPayload,
+      }),
     });
     closeTeamEditModal();
     await loadTeams();

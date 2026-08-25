@@ -238,7 +238,10 @@
             <div class="card">
               <h1>Команды</h1>
               <form id="teamCreateForm" class="form form-wide">
-                <label>Название <input id="tcName" required maxlength="255" /></label>
+                <div class="row gap fields-row">
+                  <label class="grow">Название <input id="tcName" required maxlength="255" /></label>
+                  <label class="grow">Город <input id="tcCity" maxlength="255" placeholder="Ярославль" /></label>
+                </div>
                 <label>Логотип
                   <div class="row gap upload-row">
                     <input id="tcLogo" class="grow" type="text" maxlength="1024" placeholder="/static/teams/… или https://…" />
@@ -271,13 +274,25 @@
                     <tr>
                       <th>Лого</th>
                       <th>Название</th>
-                      <th>Описание</th>
+                      <th>Город</th>
+                      <th title="Турниров с сыгранными матчами">Т</th>
+                      <th title="Игр">И</th>
+                      <th title="Побед">В</th>
+                      <th title="Ничьих">Н</th>
+                      <th title="Поражений">П</th>
+                      <th title="Забито">Заб</th>
+                      <th title="Пропущено">Проп</th>
+                      <th title="Очки: 2 за победу, 1 за ничью">О</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody id="teamRows"></tbody>
                 </table>
               </div>
+              <p class="muted">
+                Статистика считается по заведённым матчам. Значение со звёздочкой вписано
+                руками и при добавлении новых матчей не пересчитывается.
+              </p>
             </div>
           </div>
 
@@ -602,7 +617,10 @@
         <h2>Редактировать команду</h2>
         <form id="teamEditForm" class="form form-wide">
           <input type="hidden" id="teId" />
-          <label>Название <input id="teName" required maxlength="255" /></label>
+          <div class="row gap fields-row">
+            <label class="grow">Название <input id="teName" required maxlength="255" /></label>
+            <label class="grow">Город <input id="teCity" maxlength="255" placeholder="Ярославль" /></label>
+          </div>
           <label>Логотип
             <div class="row gap upload-row">
               <input id="teLogo" class="grow" type="text" maxlength="1024" placeholder="/static/teams/… или https://…" />
@@ -614,6 +632,30 @@
           <label>Описание (используется в выборе команд при создании турнира)
             <textarea id="teDescription" rows="3" maxlength="2000"></textarea>
           </label>
+
+          <fieldset class="team-picker">
+            <legend>Общая статистика за всю историю</legend>
+            <p class="muted">
+              Пусто — показатель считается по заведённым матчам (рассчитанное значение
+              подсказано в поле). Если вписать своё, оно заменит расчёт и <b>не будет
+              пересчитываться</b> при добавлении матчей. Чтобы вернуть расчёт — очистите поле.
+            </p>
+            <div class="row gap fields-row">
+              <label class="grow">Турниров <input id="teManualTournaments" type="number" min="0" max="10000" /></label>
+              <label class="grow">Игр <input id="teManualGames" type="number" min="0" max="100000" /></label>
+              <label class="grow">Побед <input id="teManualWins" type="number" min="0" max="100000" /></label>
+            </div>
+            <div class="row gap fields-row">
+              <label class="grow">Ничьих <input id="teManualDraws" type="number" min="0" max="100000" /></label>
+              <label class="grow">Поражений <input id="teManualLosses" type="number" min="0" max="100000" /></label>
+            </div>
+            <div class="row gap fields-row">
+              <label class="grow">Забито <input id="teManualGoalsFor" type="number" min="0" max="1000000" /></label>
+              <label class="grow">Пропущено <input id="teManualGoalsAgainst" type="number" min="0" max="1000000" /></label>
+            </div>
+            <p id="teStatsHint" class="msg muted"></p>
+          </fieldset>
+
           <div class="row gap">
             <button type="submit" class="btn primary">Сохранить</button>
             <button type="button" id="teamEditCancelBtn" class="btn">Отмена</button>

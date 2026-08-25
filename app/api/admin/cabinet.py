@@ -10,24 +10,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.vk_client import VKAPIError
 from app.core.config import Settings, get_settings
 from app.core.roles import ROLE_ADMIN
 from app.core.security import hash_password
 from app.db.session import get_db_session
 from app.deps import get_current_admin, require_admin_role
 from app.models.admin_user import AdminUser
-from app.clients.vk_client import VKAPIError
 from app.repositories import admin_users as admin_repo
 from app.repositories import appointments as appointments_repo
 from app.repositories import arenas as arenas_repo
+from app.repositories import games as games_repo
 from app.repositories import news_posts as news_repo
 from app.repositories import questions as questions_repo
 from app.repositories import reviews as reviews_repo
 from app.repositories import service_requests as service_requests_repo
-from app.repositories import games as games_repo
 from app.repositories import teams as teams_repo
-from app.repositories import tournament_players as roster_repo
 from app.repositories import tournament_applications as tournament_apps_repo
+from app.repositories import tournament_players as roster_repo
 from app.repositories import tournaments as tournaments_repo
 from app.schemas.admin import (
     AdminCreateRequest,
@@ -52,11 +52,8 @@ from app.schemas.review import (
     ReviewUpdate,
 )
 from app.schemas.service_request import ServiceRequestListItem
-from app.schemas.tournament_application import (
-    TournamentPlayerApplicationListItem,
-    TournamentTeamApplicationListItem,
-)
 from app.schemas.tournament import (
+    TeamCareerAdmin,
     TeamCreate,
     TeamListItem,
     TeamUpdate,
@@ -66,8 +63,13 @@ from app.schemas.tournament import (
     TournamentTeamInput,
     TournamentUpdate,
 )
+from app.schemas.tournament_application import (
+    TournamentPlayerApplicationListItem,
+    TournamentTeamApplicationListItem,
+)
 from app.services import news_posts as news_service
 from app.services import reviews as reviews_service
+from app.services import stats as stats_service
 from app.services.news_posts import NewsPostError
 
 router = APIRouter()
@@ -475,6 +477,50 @@ async def admin_delete_news(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _career_admin(c: stats_service.TeamCareer) -> TeamCareerAdmin:
+    return TeamCareerAdmin(
+        tournaments=c.tournaments,
+        games=c.games,
+        wins=c.wins,
+        draws=c.draws,
+        losses=c.losses,
+        goals_for=c.goals_for,
+        goals_against=c.goals_against,
+        goal_diff=c.goal_diff,
+        points=c.points,
+    )
+
+
+def _build_team_item(
+    row,  # noqa: ANN001 — row: Team
+    effective: stats_service.TeamCareer,
+    computed: stats_service.TeamCareer,
+    manual: set[str],
+) -> TeamListItem:
+    """Команда + статистика: действующая, рассчитанная и список ручных полей."""
+    return TeamListItem(
+        id=row.id,
+        name=row.name,
+        city=row.city,
+        logo=row.logo,
+        description=row.description,
+        stats=_career_admin(effective),
+        computed=_career_admin(computed),
+        manual_fields=sorted(manual),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+async def _team_items(
+    session: AsyncSession,
+    rows: list,  # noqa: ANN001 — list[Team]
+) -> list[TeamListItem]:
+    """Собрать ответ для списка команд одним расчётом на всех (без N+1)."""
+    stats = await stats_service.team_effective_stats(session, rows)
+    return [_build_team_item(r, *stats[r.id]) for r in rows]
+
+
 @router.get("/teams", response_model=list[TeamListItem])
 async def admin_list_teams(
     admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
@@ -483,7 +529,7 @@ async def admin_list_teams(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> list[TeamListItem]:
     rows = await teams_repo.list_all(session, skip=skip, limit=limit)
-    return [TeamListItem.model_validate(r) for r in rows]
+    return await _team_items(session, rows)
 
 
 @router.post("/teams", response_model=TeamListItem, status_code=status.HTTP_201_CREATED)
@@ -492,13 +538,9 @@ async def admin_create_team(
     admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TeamListItem:
-    row = await teams_repo.create_one(
-        session,
-        name=body.name,
-        logo=body.logo,
-        description=body.description,
-    )
-    return TeamListItem.model_validate(row)
+    # **model_dump(): новые колонки команды не требуют правки этого роута.
+    row = await teams_repo.create_one(session, **body.model_dump())
+    return (await _team_items(session, [row]))[0]
 
 
 @router.patch("/teams/{team_id}", response_model=TeamListItem)
@@ -514,7 +556,7 @@ async def admin_update_team(
     row = await teams_repo.update_one(session, team_id, raw)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Команда не найдена")
-    return TeamListItem.model_validate(row)
+    return (await _team_items(session, [row]))[0]
 
 
 @router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -616,6 +658,7 @@ def _build_tournament_item(row) -> TournamentListItem:  # noqa: ANN001 — row: 
             TournamentTeamAdminItem(
                 id=link.team.id,
                 name=link.team.name,
+                city=link.team.city,
                 logo=link.team.logo,
                 description=link.team.description,
                 photo=link.photo,

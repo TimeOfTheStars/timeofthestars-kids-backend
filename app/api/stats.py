@@ -45,8 +45,14 @@ async def _require_visible_tournament(
     return row
 
 
-def _team_ref(team_id: uuid.UUID, name: str, logo: str | None, base: str | None) -> TeamRef:
-    return TeamRef(id=str(team_id), name=name, logo=absolutize(logo, base))
+def _team_ref(
+    team_id: uuid.UUID,
+    name: str,
+    logo: str | None,
+    base: str | None,
+    city: str | None = None,
+) -> TeamRef:
+    return TeamRef(id=str(team_id), name=name, city=city, logo=absolutize(logo, base))
 
 
 def _player_ref(player, base: str | None) -> PlayerRef:  # noqa: ANN001 — player: Player
@@ -81,7 +87,7 @@ async def tournament_standings(
     return [
         StandingRowPublic(
             place=idx,
-            team=_team_ref(core.team_id, core.name, logo, base),
+            team=_team_ref(team.id, team.name, team.logo, base, team.city),
             games=core.games,
             wins=core.wins,
             draws=core.draws,
@@ -91,7 +97,7 @@ async def tournament_standings(
             goal_diff=core.goal_diff,
             points=core.points,
         )
-        for idx, (core, logo) in enumerate(rows, start=1)
+        for idx, (core, team) in enumerate(rows, start=1)
     ]
 
 
@@ -104,8 +110,12 @@ def _game_public(game: Game, base: str | None) -> GamePublic:
         match_no=game.position,
         date=game.date,
         time=game.time,
-        team_a=_team_ref(game.team_a.id, game.team_a.name, game.team_a.logo, base),
-        team_b=_team_ref(game.team_b.id, game.team_b.name, game.team_b.logo, base),
+        team_a=_team_ref(
+            game.team_a.id, game.team_a.name, game.team_a.logo, base, game.team_a.city,
+        ),
+        team_b=_team_ref(
+            game.team_b.id, game.team_b.name, game.team_b.logo, base, game.team_b.city,
+        ),
         score_a=game.score_a,
         score_b=game.score_b,
         shots_a=game.shots_a,
@@ -197,7 +207,7 @@ async def game_protocol(
             out.append(
                 PlayerStatsPublic(
                     player=_player_ref(line.player, base),
-                    team=_team_ref(team.id, team.name, team.logo, base),
+                    team=_team_ref(team.id, team.name, team.logo, base, team.city),
                     number=entry.entry.number if entry else None,
                     games=1,
                     goals=line.goals,
@@ -247,7 +257,7 @@ def _roster_stat_public(row, base: str | None) -> PlayerStatsPublic:  # noqa: AN
     team = row.entry.team
     return PlayerStatsPublic(
         player=_player_ref(row.entry.player, base),
-        team=_team_ref(team.id, team.name, team.logo, base),
+        team=_team_ref(team.id, team.name, team.logo, base, team.city),
         number=row.entry.number,
         games=row.games,
         goals=row.goals,
@@ -297,7 +307,7 @@ async def tournament_best_players(
     return [
         PlayerStatsPublic(
             player=_player_ref(r.player, base),
-            team=_team_ref(r.team.id, r.team.name, r.team.logo, base)
+            team=_team_ref(r.team.id, r.team.name, r.team.logo, base, r.team.city)
             if r.team is not None
             else TeamRef(id="", name="—"),
             number=r.number,

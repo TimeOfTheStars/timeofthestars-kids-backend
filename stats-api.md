@@ -21,6 +21,7 @@
 - [`GET /tournaments/{id}/players`](#get-tournamentsidplayers) — игроки турнира
 - [`GET /tournaments/{id}/best-players`](#get-tournamentsidbest-players) — бомбардиры
 - [`GET /players/{id}/stats`](#get-playersidstats) — карточка игрока
+- [`GET /teams` и `GET /teams/{id}`](#get-teams-и-get-teamsid) — команды и их общая статистика
 - [Подводные камни](#подводные-камни)
 - [Админские ручки](#админские-ручки)
 
@@ -53,7 +54,7 @@
 ## Изменения в `GET /tournaments`
 
 Добавлены четыре поля. У турниров, заведённых до появления статистики, первые три — `null`,
-`hasStats` — `false`.
+`hasStats` — `false`. В `teams[]` у каждой команды появился `city` (`null`, если не заполнен).
 
 | Поле | Тип | Смысл |
 |---|---|---|
@@ -86,8 +87,8 @@
   "hasStats": true,
 
   "teams": [
-    { "name": "ХК «ИСКРА»",   "logo": null, "photo": null },
-    { "name": "ХК «ИМПУЛЬС»", "logo": null, "photo": null }
+    { "name": "ХК «ИСКРА»",   "city": "Ярославль", "logo": null, "photo": null },
+    { "name": "ХК «ИМПУЛЬС»", "city": "Ярославль", "logo": null, "photo": null }
   ]
 }
 ```
@@ -113,7 +114,7 @@ curl -s https://api.timeofthestars-kids.ru/tournaments/{id}/standings
 [
   {
     "place": 1,
-    "team": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "logo": null },
+    "team": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "city": "Ярославль", "logo": null },
     "games": 1,
     "wins": 1,
     "draws": 0,
@@ -125,7 +126,7 @@ curl -s https://api.timeofthestars-kids.ru/tournaments/{id}/standings
   },
   {
     "place": 2,
-    "team": { "id": "ffbcfc25-…", "name": "ХК «ИСКРА»", "logo": null },
+    "team": { "id": "ffbcfc25-…", "name": "ХК «ИСКРА»", "city": "Ярославль", "logo": null },
     "games": 1, "wins": 0, "draws": 0, "losses": 1,
     "goalsFor": 1, "goalsAgainst": 8, "goalDiff": -7, "points": 0
   }
@@ -154,8 +155,8 @@ curl -s https://api.timeofthestars-kids.ru/tournaments/{id}/games
     "matchNo": 1,
     "date": "2026-08-23",
     "time": null,
-    "teamA": { "id": "ffbcfc25-…", "name": "ХК «ИСКРА»",   "logo": null },
-    "teamB": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "logo": null },
+    "teamA": { "id": "ffbcfc25-…", "name": "ХК «ИСКРА»",   "city": "Ярославль", "logo": null },
+    "teamB": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "city": "Ярославль", "logo": null },
     "scoreA": 1,
     "scoreB": 8,
     "shotsA": 8,
@@ -200,7 +201,7 @@ curl -s https://api.timeofthestars-kids.ru/games/{id}
         "position": "вратарь",
         "birthDate": null
       },
-      "team": { "id": "ffbcfc25-…", "name": "ХК «ИСКРА»", "logo": null },
+      "team": { "id": "ffbcfc25-…", "name": "ХК «ИСКРА»", "city": "Ярославль", "logo": null },
       "number": 35,
       "games": 1,
       "goals": 0,
@@ -270,7 +271,7 @@ curl -s https://api.timeofthestars-kids.ru/tournaments/{id}/players
 ```json
 {
   "player": { "id": "a119ead3-…", "fullName": "Рогов Савелий", "photo": null, "position": null, "birthDate": null },
-  "team": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "logo": null },
+  "team": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "city": "Ярославль", "logo": null },
   "number": 13,
   "games": 1,
   "goals": 4,
@@ -288,7 +289,7 @@ curl -s https://api.timeofthestars-kids.ru/tournaments/{id}/players
 ```json
 {
   "player": { "id": "cd7e9a5f-…", "fullName": "Малахов Дмитрий", "photo": null, "position": "вратарь", "birthDate": null },
-  "team": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "logo": null },
+  "team": { "id": "3f6c3db1-…", "name": "ХК «ИМПУЛЬС»", "city": "Ярославль", "logo": null },
   "number": 1,
   "games": 1,
   "goals": 0,
@@ -382,6 +383,55 @@ curl -s "https://api.timeofthestars-kids.ru/players/{id}/stats?team_id={teamId}"
 
 ---
 
+## GET /teams и GET /teams/{id}
+
+Справочник команд с общей статистикой за всю историю. Раньше публичного доступа
+к командам не было вовсе.
+
+```bash
+curl -s https://api.timeofthestars-kids.ru/teams
+curl -s "https://api.timeofthestars-kids.ru/teams?limit=50&skip=0"
+curl -s https://api.timeofthestars-kids.ru/teams/{id}
+```
+
+```json
+{
+  "id": "ffbcfc25-4b5d-461a-b15c-1c05be15e218",
+  "name": "Локомотив",
+  "city": "Ярославль",
+  "logo": "https://api.timeofthestars-kids.ru/static/teams/….png",
+  "description": null,
+  "stats": {
+    "tournaments": 1,
+    "games": 3,
+    "wins": 1,
+    "draws": 0,
+    "losses": 2,
+    "goalsFor": 13,
+    "goalsAgainst": 13,
+    "goalDiff": 0,
+    "points": 2
+  }
+}
+```
+
+`GET /teams` отдаёт массив таких объектов, `GET /teams/{id}` — один; несуществующая
+команда даёт `404 {"detail": "Команда не найдена"}`.
+
+| Поле | Смысл |
+|---|---|
+| `tournaments` | Турниров, где у команды есть хотя бы один матч с заполненным счётом |
+| `games` | Матчей с заполненным счётом |
+| `wins` / `draws` / `losses` | По результату матча |
+| `goalsFor` / `goalsAgainst` / `goalDiff` | Шайбы за всю историю |
+| `points` | 2 за победу, 1 за ничью |
+
+Параметры `skip` (от 0) и `limit` (1…500, по умолчанию 200) — только у списка.
+
+> ⚠️ Часть показателей может быть **вписана вручную** — см. подводный камень 7.
+
+---
+
 ## Подводные камни
 
 Собрано отдельно — это те места, где данные ведут себя не так, как можно было бы ожидать.
@@ -431,7 +481,24 @@ curl -s "https://api.timeofthestars-kids.ru/players/{id}/stats?team_id={teamId}"
 - в `/tournaments/{id}/players` и `/players/{id}/stats` — число матчей;
 - в составе внутри `/games/{id}` — всегда `1`, это статистика одного матча.
 
-### 6. Порядок отдаёт сервер
+### 6. Статистика команды может быть вписана руками
+
+В `GET /teams` и `GET /teams/{id}` любой из показателей может быть не рассчитан, а вписан
+администратором — так заводят историю турниров, матчи которых в систему ещё не внесены.
+
+Важное следствие: **вписанное значение не пересчитывается**. Если у команды стоит
+«games = 23», то после нового заведённого матча там по-прежнему будет 23, пока цифру не
+поправят руками. Публичный API **не показывает**, какие показатели ручные, поэтому:
+
+- сумма по матчам турнира может не совпадать с общей статистикой команды — это не ошибка;
+- `games` не обязан равняться `wins + draws + losses`, если переопределена только часть полей;
+- `points` всегда согласованы с `wins` и `draws` того же ответа: очки не переопределяются,
+  а выводятся из действующих побед и ничьих.
+
+Если нужна заведомо честная арифметика по данным системы — считайте её из
+`/tournaments/{id}/standings` и `/tournaments/{id}/games`, они не переопределяются.
+
+### 7. Порядок отдаёт сервер
 
 `standings` и `best-players` приходят отсортированными, `games` — в порядке `matchNo`,
 `goals` — в хронологическом порядке ввода, состав в `/games/{id}` — вратари первыми, дальше

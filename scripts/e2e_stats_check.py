@@ -347,6 +347,55 @@ async def phase_guards() -> None:
         check("расхождение со счётом видно",
               (r.json()["goals_in_timeline_a"], r.json()["goals_in_timeline_b"]), (0, 0))
 
+        print("\n--- 8b. город команды и общая статистика ---")
+        r = await c.patch(f"/api/admin/teams/{iskra['id']}", headers=H,
+                          json={"city": "Ярославль"})
+        check("город записан", r.json()["city"], "Ярославль")
+        # Расчёт должен совпасть с таблицей турнира: Искра 3 игры, 0 побед, 5-24.
+        team = next(x for x in (await c.get("/api/admin/teams", headers=H)).json()
+                    if x["id"] == iskra["id"])
+        check("расчёт по матчам",
+              (team["stats"]["tournaments"], team["stats"]["games"], team["stats"]["wins"],
+               team["stats"]["losses"], team["stats"]["goals_for"], team["stats"]["goals_against"]),
+              (1, 1, 0, 1, 1, 8))
+        check("stats == computed без правок", team["stats"], team["computed"])
+        check("ручных полей нет", team["manual_fields"], [])
+
+        # Перезапись: вписанное заменяет расчёт и не пересчитывается.
+        r = await c.patch(f"/api/admin/teams/{iskra['id']}", headers=H,
+                          json={"manual_games": 23, "manual_wins": 13})
+        d = r.json()
+        check("действующие И/В", (d["stats"]["games"], d["stats"]["wins"]), (23, 13))
+        check("рассчитанные рядом целы", (d["computed"]["games"], d["computed"]["wins"]), (1, 0))
+        check("очки от действующих В и Н", d["stats"]["points"], 13 * 2 + d["stats"]["draws"])
+        check("ручные поля названы", d["manual_fields"], ["games", "wins"])
+        pub = next(x for x in (await c.get("/teams")).json() if x["id"] == iskra["id"])
+        check("публичный /teams отдаёт действующие", pub["stats"]["games"], 23)
+        check("город в публичном /teams", pub["city"], "Ярославль")
+        check("признака ручного ввода публично нет", "manual_fields" in pub, False)
+        one = (await c.get(f"/teams/{iskra['id']}")).json()
+        check("GET /teams/{id}", (one["name"], one["stats"]["wins"]), (pub["name"], 13))
+        # Очистка возвращает расчёт.
+        r = await c.patch(f"/api/admin/teams/{iskra['id']}", headers=H,
+                          json={"manual_games": None, "manual_wins": None})
+        check("очистка вернула расчёт",
+              (r.json()["stats"]["games"], r.json()["manual_fields"]), (1, []))
+
+        print("\n--- 8c. город виден везде, где отдаётся команда ---")
+        st = next(x for x in (await c.get(f"/tournaments/{T['id']}/standings")).json()
+                  if x["team"]["id"] == iskra["id"])
+        check("таблица", st["team"]["city"], "Ярославль")
+        games_pub = (await c.get(f"/tournaments/{T['id']}/games")).json()
+        check("матчи", games_pub[0]["teamA"]["city"], "Ярославль")
+        gp = (await c.get(f"/games/{G['id']}")).json()
+        check("состав матча", gp["rosterA"][0]["team"]["city"], "Ярославль")
+        pl_pub = (await c.get(f"/tournaments/{T['id']}/players")).json()
+        check("игроки турнира", "city" in pl_pub[0]["team"], True)
+        bp = (await c.get(f"/tournaments/{T['id']}/best-players")).json()
+        check("бомбардиры", "city" in bp[0]["team"], True)
+        tt = next(x for x in (await c.get("/tournaments")).json() if x["id"] == T["id"])
+        check("teams[] в /tournaments", "city" in tt["teams"][0], True)
+
         print("\n--- 9. защита от смены команд у заполненного матча ---")
         r = await c.patch(f"/api/admin/games/{G['id']}", headers=H,
                           json={"team_a_id": impuls["id"], "team_b_id": iskra["id"]})

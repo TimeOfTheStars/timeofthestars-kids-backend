@@ -36,14 +36,10 @@ async def get_by_ids(session: AsyncSession, team_ids: list[uuid.UUID]) -> list[T
     return list(result.scalars().all())
 
 
-async def create_one(
-    session: AsyncSession,
-    *,
-    name: str,
-    logo: str | None,
-    description: str | None = None,
-) -> Team:
-    row = Team(name=name, logo=logo, description=description)
+async def create_one(session: AsyncSession, **fields: Any) -> Team:
+    """Создать команду. Принимает поля как **fields, чтобы новые колонки
+    (город, ручные переопределения статистики) не требовали правки роута."""
+    row = Team(**fields)
     session.add(row)
     await session.commit()
     await session.refresh(row)
