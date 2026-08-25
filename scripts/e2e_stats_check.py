@@ -358,28 +358,48 @@ async def phase_guards() -> None:
               (team["stats"]["tournaments"], team["stats"]["games"], team["stats"]["wins"],
                team["stats"]["losses"], team["stats"]["goals_for"], team["stats"]["goals_against"]),
               (1, 1, 0, 1, 1, 8))
-        check("stats == computed без правок", team["stats"], team["computed"])
-        check("ручных полей нет", team["manual_fields"], [])
+        check("stats == computed без поправок", team["stats"], team["computed"])
+        check("поправок нет", team["corrected_fields"], [])
 
-        # Перезапись: вписанное заменяет расчёт и не пересчитывается.
+        # Задаём ИТОГ; сервер должен сохранить поправку к расчёту.
         r = await c.patch(f"/api/admin/teams/{iskra['id']}", headers=H,
-                          json={"manual_games": 23, "manual_wins": 13})
+                          json={"total_games": 23, "total_wins": 13})
         d = r.json()
-        check("действующие И/В", (d["stats"]["games"], d["stats"]["wins"]), (23, 13))
-        check("рассчитанные рядом целы", (d["computed"]["games"], d["computed"]["wins"]), (1, 0))
-        check("очки от действующих В и Н", d["stats"]["points"], 13 * 2 + d["stats"]["draws"])
-        check("ручные поля названы", d["manual_fields"], ["games", "wins"])
+        check("итог И/В", (d["stats"]["games"], d["stats"]["wins"]), (23, 13))
+        check("расчёт рядом цел", (d["computed"]["games"], d["computed"]["wins"]), (1, 0))
+        check("сохранена поправка, а не итог", d["corrections"], {"games": 22, "wins": 13})
+        check("очки от итоговых В и Н", d["stats"]["points"], 13 * 2 + d["stats"]["draws"])
+        check("поля с поправкой названы", d["corrected_fields"], ["games", "wins"])
         pub = next(x for x in (await c.get("/teams")).json() if x["id"] == iskra["id"])
-        check("публичный /teams отдаёт действующие", pub["stats"]["games"], 23)
+        check("публичный /teams отдаёт итог", pub["stats"]["games"], 23)
         check("город в публичном /teams", pub["city"], "Ярославль")
-        check("признака ручного ввода публично нет", "manual_fields" in pub, False)
+        check("поправки публично не раскрываются", "corrections" in pub, False)
         one = (await c.get(f"/teams/{iskra['id']}")).json()
         check("GET /teams/{id}", (one["name"], one["stats"]["wins"]), (pub["name"], 13))
-        # Очистка возвращает расчёт.
+
+        # ГЛАВНОЕ: новый матч должен прибавиться к итогу, а не быть проигнорирован.
+        extra_game = await c.post(f"/api/admin/tournaments/{T['id']}/games", headers=H, json={
+            "team_a_id": iskra["id"], "team_b_id": impuls["id"],
+            "date": "2026-08-23", "score_a": 3, "score_b": 0})
+        check("добавлен ещё матч", extra_game.status_code, 201)
+        after = next(x for x in (await c.get("/api/admin/teams", headers=H)).json()
+                     if x["id"] == iskra["id"])
+        check("итог вырос вместе с расчётом",
+              (after["stats"]["games"], after["stats"]["wins"]), (24, 14))
+        check("расчёт тоже вырос",
+              (after["computed"]["games"], after["computed"]["wins"]), (2, 1))
+        check("поправка не изменилась", after["corrections"], {"games": 22, "wins": 13})
+        await c.delete(f"/api/admin/games/{extra_game.json()['id']}", headers=H)
+
+        # Итог, равный расчёту, поправки не создаёт.
         r = await c.patch(f"/api/admin/teams/{iskra['id']}", headers=H,
-                          json={"manual_games": None, "manual_wins": None})
-        check("очистка вернула расчёт",
-              (r.json()["stats"]["games"], r.json()["manual_fields"]), (1, []))
+                          json={"total_games": 1, "total_wins": 0})
+        check("итог = расчёт → поправки нет", r.json()["corrected_fields"], [])
+        # Пустое значение убирает поправку.
+        r = await c.patch(f"/api/admin/teams/{iskra['id']}", headers=H,
+                          json={"total_games": None, "total_wins": None})
+        check("очистка вернула чистый расчёт",
+              (r.json()["stats"]["games"], r.json()["corrected_fields"]), (1, []))
 
         print("\n--- 8c. город виден везде, где отдаётся команда ---")
         st = next(x for x in (await c.get(f"/tournaments/{T['id']}/standings")).json()

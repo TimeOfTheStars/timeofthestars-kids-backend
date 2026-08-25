@@ -224,35 +224,60 @@ class TeamCareer:
         return self.goals_for - self.goals_against
 
 
-def apply_manual_overrides(
+def apply_corrections(
     computed: TeamCareer,
-    overrides: dict[str, int | None],
+    corrections: dict[str, int | None],
 ) -> tuple[TeamCareer, set[str]]:
-    """Наложить ручные значения на расчёт: (действующая статистика, ручные поля).
+    """Итог = расчёт по матчам + поправка. Возвращает (итог, поля с поправкой).
 
-    Семантика — ПЕРЕЗАПИСЬ: заполненное значение подменяет расчёт целиком и само
-    не пересчитывается, поэтому после новых матчей может расходиться с ними.
-    None означает «считать автоматически», то есть очистка поля возвращает расчёт.
+    Поправка — это матчи, которых в системе нет (старые турниры). Модель именно
+    складывающая, а не замещающая: новые заведённые матчи попадают в итог сами,
+    а внесённая правка при этом не устаревает.
 
-    Очки не переопределяются: они выводятся из действующих побед и ничьих, иначе
-    было бы возможно состояние, где вписанные очки противоречат вписанным победам.
+    None и 0 равнозначны «поправки нет»; 0 не считается правкой, чтобы кабинет
+    не подсвечивал поле, где ничего не менялось. Поправка может быть
+    отрицательной — иначе итог нельзя было бы уменьшить.
+
+    Очки не поправляются: они выводятся из итоговых побед и ничьих.
     """
     effective = TeamCareer(**{f: getattr(computed, f) for f in TEAM_STAT_FIELDS})
-    manual: set[str] = set()
+    corrected: set[str] = set()
 
     for field_name in TEAM_STAT_FIELDS:
-        value = overrides.get(field_name)
-        if value is None:
+        delta = corrections.get(field_name) or 0
+        if delta == 0:
             continue
-        setattr(effective, field_name, value)
-        manual.add(field_name)
+        setattr(effective, field_name, getattr(computed, field_name) + delta)
+        corrected.add(field_name)
 
-    return effective, manual
+    return effective, corrected
 
 
-def overrides_from_team(team: Team) -> dict[str, int | None]:
-    """Прочитать колонки manual_* команды в вид, который ждёт apply_manual_overrides."""
-    return {f: getattr(team, f"manual_{f}") for f in TEAM_STAT_FIELDS}
+def corrections_from_team(team: Team) -> dict[str, int | None]:
+    """Прочитать колонки extra_* команды в вид, который ждёт apply_corrections."""
+    return {f: getattr(team, f"extra_{f}") for f in TEAM_STAT_FIELDS}
+
+
+def corrections_for_totals(
+    computed: TeamCareer,
+    totals: dict[str, int | None],
+) -> dict[str, int | None]:
+    """Перевести желаемые ИТОГИ в поправки, которые нужно сохранить.
+
+    Кабинет показывает и принимает итог («у команды 23 игры»), а хранится
+    поправка, чтобы новые матчи продолжали учитываться. None на входе означает
+    «убрать поправку», то есть вернуться к чистому расчёту.
+    """
+    out: dict[str, int | None] = {}
+    for field_name, total in totals.items():
+        if field_name not in TEAM_STAT_FIELDS:
+            continue
+        if total is None:
+            out[field_name] = None
+            continue
+        delta = total - getattr(computed, field_name)
+        out[field_name] = delta or None
+    return out
 
 
 # ============================================================== обвязка с SQL
@@ -752,13 +777,13 @@ async def team_effective_stats(
     session: AsyncSession,
     teams: list[Team],
 ) -> dict[uuid.UUID, tuple[TeamCareer, TeamCareer, set[str]]]:
-    """Для списка команд: (действующая, рассчитанная, множество ручных полей)."""
+    """Для списка команд: (итог, расчёт по матчам, поля с поправкой)."""
     computed = await team_career_stats_bulk(session, [t.id for t in teams])
     out: dict[uuid.UUID, tuple[TeamCareer, TeamCareer, set[str]]] = {}
     for team in teams:
         base = computed.get(team.id, TeamCareer())
-        effective, manual = apply_manual_overrides(base, overrides_from_team(team))
-        out[team.id] = (effective, base, manual)
+        effective, corrected = apply_corrections(base, corrections_from_team(team))
+        out[team.id] = (effective, base, corrected)
     return out
 
 

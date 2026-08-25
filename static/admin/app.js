@@ -513,13 +513,15 @@ async function loadTeams() {
     const descRaw = t.description ? String(t.description) : "";
     const descPreview = descRaw.length > 140 ? descRaw.slice(0, 140) + "…" : descRaw;
     const descCell = descPreview ? escapeHtml(descPreview) : '<span class="muted">—</span>';
-    // Звёздочка = значение вписано руками и не пересчитывается по матчам.
-    const manual = new Set(t.manual_fields || []);
+    // Звёздочка = к показателю добавлена поправка на историю вне системы.
+    const corrected = new Set(t.corrected_fields || []);
     const stat = (field) => {
       const v = t.stats ? t.stats[field] : 0;
-      return manual.has(field)
-        ? `<span title="Вписано руками, расчёт: ${t.computed ? t.computed[field] : 0}"><b>${v}</b>*</span>`
-        : String(v);
+      if (!corrected.has(field)) return String(v);
+      const base = t.computed ? t.computed[field] : 0;
+      const delta = t.corrections ? t.corrections[field] : 0;
+      const sign = delta > 0 ? `+${delta}` : String(delta);
+      return `<span title="По матчам ${base}, поправка ${sign}"><b>${v}</b>*</span>`;
     };
     tr.innerHTML = `
       <td data-label="Лого">${logoCell}</td>
@@ -567,20 +569,22 @@ function openTeamEditModal(t) {
   $("teCity").value = t.city || "";
   $("teLogo").value = t.logo || "";
   $("teDescription").value = t.description || "";
-  // Пустое поле = «считать автоматически», поэтому в placeholder кладём расчёт.
-  // Сырые manual_* в ответе не приходят, но они и не нужны: если поле помечено
-  // ручным, его вписанное значение и есть действующее в stats.
-  const manualSet = new Set(t.manual_fields || []);
+  // В поле показываем ИТОГ. Пустое поле = поправки нет, только расчёт по матчам.
+  const corrected = new Set(t.corrected_fields || []);
   for (const [field, inputId] of Object.entries(TEAM_STAT_INPUTS)) {
     const el = $(inputId);
-    el.value = manualSet.has(field) ? String(t.stats[field]) : "";
+    el.value = corrected.has(field) ? String(t.stats[field]) : "";
     el.placeholder = `по матчам: ${t.computed ? t.computed[field] : 0}`;
   }
   const c = t.computed || {};
+  const deltas = Object.entries(t.corrections || {})
+    .map(([f, d]) => `${TEAM_STAT_LABELS[f] || f} ${d > 0 ? "+" + d : d}`)
+    .join(", ");
   $("teStatsHint").textContent =
-    `По матчам: турниров ${c.tournaments ?? 0}, игр ${c.games ?? 0}, ` +
+    `По заведённым матчам: турниров ${c.tournaments ?? 0}, игр ${c.games ?? 0}, ` +
     `${c.wins ?? 0}-${c.draws ?? 0}-${c.losses ?? 0}, ` +
-    `шайбы ${c.goals_for ?? 0}-${c.goals_against ?? 0}, очки ${c.points ?? 0}.`;
+    `шайбы ${c.goals_for ?? 0}-${c.goals_against ?? 0}, очки ${c.points ?? 0}.` +
+    (deltas ? ` Поправка: ${deltas}.` : " Поправок нет.");
   $("teamEditMsg").textContent = "";
   show($("teamEditMsg"), false);
   show($("teamEditModal"), true);
@@ -591,6 +595,16 @@ function closeTeamEditModal() {
   show($("teamEditModal"), false);
   $("teamEditModal").setAttribute("aria-hidden", "true");
 }
+
+const TEAM_STAT_LABELS = {
+  tournaments: "турниров",
+  games: "игр",
+  wins: "побед",
+  draws: "ничьих",
+  losses: "поражений",
+  goals_for: "забито",
+  goals_against: "пропущено",
+};
 
 // Поле статистики команды → id инпута в модалке правки.
 const TEAM_STAT_INPUTS = {
@@ -1559,10 +1573,11 @@ $("teamEditForm").addEventListener("submit", async (e) => {
   const city = String($("teCity").value || "").trim();
   const logo = String($("teLogo").value || "").trim();
   const description = String($("teDescription").value || "").trim();
-  // Пустое поле → null, то есть «вернуться к расчёту».
-  const manualPayload = {};
+  // Отправляем ИТОГ; сервер сам вычтет расчёт и сохранит поправку.
+  // Пустое поле → null, то есть «поправку убрать».
+  const totalsPayload = {};
   for (const [field, inputId] of Object.entries(TEAM_STAT_INPUTS)) {
-    manualPayload[`manual_${field}`] = intOrNull($(inputId).value);
+    totalsPayload[`total_${field}`] = intOrNull($(inputId).value);
   }
   if (!name) {
     msg.textContent = "Название обязательно.";
@@ -1577,7 +1592,7 @@ $("teamEditForm").addEventListener("submit", async (e) => {
         city: city || null,
         logo: logo || null,
         description: description || null,
-        ...manualPayload,
+        ...totalsPayload,
       }),
     });
     closeTeamEditModal();

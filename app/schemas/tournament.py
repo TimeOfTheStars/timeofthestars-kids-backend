@@ -90,33 +90,38 @@ class TeamListItem(BaseModel):
     city: str | None
     logo: str | None
     description: str | None
-    # Действующие значения: расчёт, поверх которого наложены ручные переопределения.
+    # Итог: расчёт по матчам плюс поправка.
     stats: TeamCareerAdmin
-    # Как показатель посчитался по матчам — чтобы в кабинете было видно расхождение.
+    # Только по заведённым матчам — чтобы в кабинете было видно, откуда взялся итог.
     computed: TeamCareerAdmin
-    # Какие поля стоят руками и потому НЕ пересчитываются при новых матчах.
-    manual_fields: list[str]
+    # Сохранённые поправки (итог − расчёт). Ноля и None здесь не бывает.
+    corrections: dict[str, int]
+    # Какие показатели имеют поправку. Итог по ним всё равно продолжает считаться.
+    corrected_fields: list[str]
     created_at: datetime
     updated_at: datetime
 
 
-class TeamStatOverrides(BaseModel):
-    """Ручные переопределения общей статистики. None — считать по матчам.
+class TeamStatTotals(BaseModel):
+    """Желаемые ИТОГИ общей статистики команды. None — «поправки нет».
 
-    Вписанное значение заменяет расчёт целиком и само не пересчитывается.
-    Очки не переопределяются: выводятся из действующих побед и ничьих.
+    Принимается итог, а хранится поправка (итог − расчёт по матчам), поэтому
+    статистика продолжает считаться: новые матчи попадают в итог сами, а
+    внесённая правка не устаревает.
+
+    Очки не задаются: выводятся из итоговых побед и ничьих.
     """
 
-    manual_tournaments: int | None = Field(default=None, ge=0, le=10_000)
-    manual_games: int | None = Field(default=None, ge=0, le=100_000)
-    manual_wins: int | None = Field(default=None, ge=0, le=100_000)
-    manual_draws: int | None = Field(default=None, ge=0, le=100_000)
-    manual_losses: int | None = Field(default=None, ge=0, le=100_000)
-    manual_goals_for: int | None = Field(default=None, ge=0, le=1_000_000)
-    manual_goals_against: int | None = Field(default=None, ge=0, le=1_000_000)
+    total_tournaments: int | None = Field(default=None, ge=0, le=10_000)
+    total_games: int | None = Field(default=None, ge=0, le=100_000)
+    total_wins: int | None = Field(default=None, ge=0, le=100_000)
+    total_draws: int | None = Field(default=None, ge=0, le=100_000)
+    total_losses: int | None = Field(default=None, ge=0, le=100_000)
+    total_goals_for: int | None = Field(default=None, ge=0, le=1_000_000)
+    total_goals_against: int | None = Field(default=None, ge=0, le=1_000_000)
 
 
-class TeamCreate(TeamStatOverrides):
+class TeamCreate(TeamStatTotals):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(..., min_length=1, max_length=255)
@@ -141,7 +146,7 @@ class TeamCreate(TeamStatOverrides):
         return v or None
 
 
-class TeamUpdate(TeamStatOverrides):
+class TeamUpdate(TeamStatTotals):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str | None = Field(default=None, min_length=1, max_length=255)

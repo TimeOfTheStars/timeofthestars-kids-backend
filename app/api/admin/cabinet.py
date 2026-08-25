@@ -477,6 +477,22 @@ async def admin_delete_news(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _split_team_totals(
+    fields: dict,
+    computed: stats_service.TeamCareer,
+) -> dict:
+    """Заменить total_* на extra_*: принимаем итог, храним поправку к расчёту."""
+    totals = {
+        f: fields.pop(f"total_{f}")
+        for f in stats_service.TEAM_STAT_FIELDS
+        if f"total_{f}" in fields
+    }
+    if totals:
+        for field_name, delta in stats_service.corrections_for_totals(computed, totals).items():
+            fields[f"extra_{field_name}"] = delta
+    return fields
+
+
 def _career_admin(c: stats_service.TeamCareer) -> TeamCareerAdmin:
     return TeamCareerAdmin(
         tournaments=c.tournaments,
@@ -495,9 +511,10 @@ def _build_team_item(
     row,  # noqa: ANN001 — row: Team
     effective: stats_service.TeamCareer,
     computed: stats_service.TeamCareer,
-    manual: set[str],
+    corrected: set[str],
 ) -> TeamListItem:
-    """Команда + статистика: действующая, рассчитанная и список ручных полей."""
+    """Команда + статистика: итог, расчёт по матчам и сохранённые поправки."""
+    stored = stats_service.corrections_from_team(row)
     return TeamListItem(
         id=row.id,
         name=row.name,
@@ -506,7 +523,8 @@ def _build_team_item(
         description=row.description,
         stats=_career_admin(effective),
         computed=_career_admin(computed),
-        manual_fields=sorted(manual),
+        corrections={f: stored[f] for f in sorted(corrected) if stored[f]},
+        corrected_fields=sorted(corrected),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -538,8 +556,8 @@ async def admin_create_team(
     admin: Annotated[AdminUser, Depends(get_current_admin)],  # noqa: ARG001
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TeamListItem:
-    # **model_dump(): новые колонки команды не требуют правки этого роута.
-    row = await teams_repo.create_one(session, **body.model_dump())
+    fields = _split_team_totals(body.model_dump(), stats_service.TeamCareer())
+    row = await teams_repo.create_one(session, **fields)
     return (await _team_items(session, [row]))[0]
 
 
@@ -553,6 +571,13 @@ async def admin_update_team(
     raw = body.model_dump(exclude_unset=True)
     if not raw:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нет полей для обновления")
+    existing = await teams_repo.get_by_id(session, team_id)
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Команда не найдена")
+    # Итоги переводим в поправки по СВЕЖЕМУ расчёту, чтобы правка не опиралась
+    # на устаревшее значение, показанное форме при открытии.
+    computed = await stats_service.team_career_stats(session, team_id)
+    raw = _split_team_totals(raw, computed)
     row = await teams_repo.update_one(session, team_id, raw)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Команда не найдена")
