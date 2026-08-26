@@ -50,22 +50,13 @@ async def get_by_id(session: AsyncSession, game_id: uuid.UUID) -> Game | None:
     return result.scalars().unique().one_or_none()
 
 
-async def count_finished(session: AsyncSession, tournament_id: uuid.UUID) -> int:
-    """Сколько матчей турнира сыграно — для флага hasStats в публичном API."""
-    stmt = select(func.count(Game.id)).where(
-        Game.tournament_id == tournament_id,
-        Game.is_finished.is_(True),
-    )
-    return int((await session.execute(stmt)).scalar_one())
+async def counts_by_tournament(session: AsyncSession) -> dict[uuid.UUID, int]:
+    """Число ЗАВЕДЁННЫХ матчей по всем турнирам одним запросом (для списка /tournaments).
 
-
-async def finished_counts_by_tournament(session: AsyncSession) -> dict[uuid.UUID, int]:
-    """Число сыгранных матчей по всем турнирам одним запросом (для списка /tournaments)."""
-    stmt = (
-        select(Game.tournament_id, func.count(Game.id))
-        .where(Game.is_finished.is_(True))
-        .group_by(Game.tournament_id)
-    )
+    Считаются все матчи, а не только сыгранные: флаг hasGames говорит фронту, что
+    турнир можно открыть и показать расписание, даже когда результатов ещё нет.
+    """
+    stmt = select(Game.tournament_id, func.count(Game.id)).group_by(Game.tournament_id)
     result = await session.execute(stmt)
     return {tid: int(cnt) for tid, cnt in result.all()}
 

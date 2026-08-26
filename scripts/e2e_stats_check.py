@@ -215,7 +215,28 @@ async def phase_paper_protocol() -> None:
 
         tours = (await c.get("/tournaments")).json()
         t_pub = next(t for t in tours if t["id"] == T["id"])
-        check("hasStats", t_pub["hasStats"], True)
+        check("hasGames", t_pub["hasGames"], True)
+        # Флаг должен подниматься от ЗАВЕДЁННОГО матча, а не от сыгранного:
+        # иначе турнир с расписанием, но без результатов, фронт не откроет.
+        r = await c.post("/api/admin/tournaments", headers=H, json={
+            "title": "Турнир без результатов", "age_category": "U8",
+            "start_date": "2026-09-01", "end_date": "2026-09-01", "arena_id": arena["id"],
+            "teams": [{"team_id": iskra["id"]}, {"team_id": impuls["id"]}]})
+        empty_t = r.json()
+        no_games = next(x for x in (await c.get("/tournaments")).json() if x["id"] == empty_t["id"])
+        check("турнир без матчей — hasGames false", no_games["hasGames"], False)
+        g_new = await c.post(f"/api/admin/tournaments/{empty_t['id']}/games", headers=H, json={
+            "team_a_id": iskra["id"], "team_b_id": impuls["id"], "date": "2026-09-01"})
+        check("матч заведён без счёта", (g_new.status_code, g_new.json()["is_finished"]), (201, False))
+        with_games = next(x for x in (await c.get("/tournaments")).json() if x["id"] == empty_t["id"])
+        check("матч без результата поднял hasGames", with_games["hasGames"], True)
+        sched = (await c.get(f"/tournaments/{empty_t['id']}/games")).json()
+        check("расписание доступно", (len(sched), sched[0]["scoreA"], sched[0]["isFinished"]),
+              (1, None, False))
+        tbl = (await c.get(f"/tournaments/{empty_t['id']}/standings")).json()
+        check("таблица отдаёт команды с нулями", [(x["team"]["name"], x["games"], x["points"]) for x in tbl],
+              [("ХК «ИМПУЛЬС»", 0, 0), ("ХК «ИСКРА»", 0, 0)])
+        await c.delete(f"/api/admin/tournaments/{empty_t['id']}", headers=H)
         check("регламент в публичном API", (t_pub["gameFormat"], t_pub["periodMinutes"], t_pub["periodsCount"]), ("4-4", 15, 3))
 
 

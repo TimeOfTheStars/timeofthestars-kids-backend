@@ -55,9 +55,9 @@ class TournamentPublic(BaseModel):
     game_format: str | None = Field(default=None, serialization_alias="gameFormat")
     period_minutes: int | None = Field(default=None, serialization_alias="periodMinutes")
     periods_count: int | None = Field(default=None, serialization_alias="periodsCount")
-    # Есть ли у турнира хотя бы один сыгранный матч — фронт по этому флагу решает,
-    # показывать ли блок статистики, не делая лишний запрос.
-    has_stats: bool = Field(default=False, serialization_alias="hasStats")
+    # Заведён ли у турнира хотя бы один матч. По этому флагу фронт решает, можно ли
+    # открыть турнир: расписание есть уже тогда, когда матчи созданы, но не сыграны.
+    has_games: bool = Field(default=False, serialization_alias="hasGames")
     teams: list[TeamPublic] = []
 
     @field_serializer("start_time", "end_time")

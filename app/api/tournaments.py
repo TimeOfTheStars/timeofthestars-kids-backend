@@ -24,7 +24,7 @@ def _derive_season(start: date) -> str:
     return f"{start.year - 1}/{start.year}"
 
 
-def _to_public(row: Tournament, base: str | None, *, has_stats: bool = False) -> TournamentPublic:
+def _to_public(row: Tournament, base: str | None, *, has_games: bool = False) -> TournamentPublic:
     season = row.season or _derive_season(row.start_date)
     return TournamentPublic(
         id=str(row.id),
@@ -48,7 +48,7 @@ def _to_public(row: Tournament, base: str | None, *, has_stats: bool = False) ->
         game_format=row.game_format,
         period_minutes=row.period_minutes,
         periods_count=row.periods_count,
-        has_stats=has_stats,
+        has_games=has_games,
         teams=[
             TeamPublic(
                 name=link.team.name,
@@ -76,5 +76,5 @@ async def list_tournaments(
     response.headers["Cache-Control"] = "public, max-age=300"
     base = settings.public_base_url
     # Одним запросом на все турниры — иначе был бы N+1 по числу турниров.
-    finished = await games_repo.finished_counts_by_tournament(session)
-    return [_to_public(r, base, has_stats=finished.get(r.id, 0) > 0) for r in rows]
+    game_counts = await games_repo.counts_by_tournament(session)
+    return [_to_public(r, base, has_games=game_counts.get(r.id, 0) > 0) for r in rows]
