@@ -1,6 +1,6 @@
 """Pydantic schemas: матчи, протокол матча и статистика.
 
-Публичные схемы — camelCase (как tournaments-api.md), админские — snake_case.
+Публичные схемы — camelCase, админские — snake_case (см. docs/public-api.md).
 """
 
 from __future__ import annotations

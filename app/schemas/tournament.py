@@ -1,6 +1,6 @@
 """Pydantic schemas: Teams и Tournaments.
 
-Публичные схемы используют camelCase (см. tournaments-api.md).
+Публичные схемы используют camelCase (см. docs/public-api.md).
 Админские — snake_case.
 """
 
@@ -35,7 +35,7 @@ class ArenaPublic(BaseModel):
 
 
 class TournamentPublic(BaseModel):
-    """Формат для GET /tournaments — camelCase согласно tournaments-api.md."""
+    """Формат для GET /tournaments — camelCase (см. docs/public-api.md)."""
 
     model_config = ConfigDict(populate_by_name=True)
 

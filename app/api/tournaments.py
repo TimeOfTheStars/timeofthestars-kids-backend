@@ -71,7 +71,7 @@ async def list_tournaments(
     settings: Annotated[Settings, Depends(get_settings)],
     response: Response,
 ) -> list[TournamentPublic]:
-    """Голый массив турниров с camelCase-полями (см. tournaments-api.md, вариант A)."""
+    """Голый массив турниров с camelCase-полями (см. docs/public-api.md)."""
     rows = await tournaments_repo.list_visible(session)
     response.headers["Cache-Control"] = "public, max-age=300"
     base = settings.public_base_url
