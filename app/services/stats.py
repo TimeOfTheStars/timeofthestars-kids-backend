@@ -128,7 +128,15 @@ class GoalieAccumulator:
     saves: int = 0
     saves_known: bool = True
     minutes_played: int = 0
+    # Сколько матчей реально зачтено. Ноль означает «неизвестно», а не «сухие матчи»:
+    # у команды в каждом матче было ноль или больше одного вратаря.
+    games_counted: int = 0
     games_ambiguous: int = 0
+
+    @property
+    def has_data(self) -> bool:
+        """Есть ли хотя бы один матч, который удалось отнести к этому вратарю."""
+        return self.games_counted > 0
 
 
 def split_goalie_stats(
@@ -158,6 +166,7 @@ def split_goalie_stats(
 
         conceded, saves = goalie_totals_for_game(score, team_id)
         acc = totals.setdefault(goalie_ids[0], GoalieAccumulator())
+        acc.games_counted += 1
         acc.goals_against += conceded
         if saves is None:
             acc.saves_known = False
@@ -442,7 +451,10 @@ async def tournament_players_with_stats(
             is_goalie=entry.player_id in goalie_ids,
         )
         acc = goalie_totals.get(entry.player_id)
-        if row.is_goalie and acc is not None:
+        # has_data: если ни один матч не удалось отнести к вратарю (в каждом было
+        # ноль или два вратаря), показатели остаются None — «неизвестно».
+        # Ноль здесь читался бы как сухие матчи.
+        if row.is_goalie and acc is not None and acc.has_data:
             row.goals_against = acc.goals_against
             row.saves = acc.saves if acc.saves_known else None
             row.minutes_played = acc.minutes_played or None
@@ -577,6 +589,8 @@ async def goalie_totals_for_player(
             for acc in targets:
                 acc.games_ambiguous += 1
             continue
+        for acc in targets:
+            acc.games_counted += 1
 
         is_home = own_team_id == team_a_id
         conceded = score_b if is_home else score_a
@@ -679,7 +693,8 @@ async def player_breakdown(
     )
 
     def _apply(totals: CareerTotals, acc: GoalieAccumulator | None) -> CareerTotals:
-        if acc is None or (acc.goals_against == 0 and acc.minutes_played == 0):
+        # Без зачтённых матчей вратарские остаются None — «неизвестно», а не нули.
+        if acc is None or not acc.has_data:
             return totals
         totals.goals_against = acc.goals_against
         totals.saves = acc.saves if acc.saves_known else None

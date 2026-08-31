@@ -132,6 +132,33 @@ def test_split_goalie_stats_single_goalie() -> None:
     assert (totals[malakhov].goals_against, totals[malakhov].saves) == (1, 7)
 
 
+def test_ambiguous_goalie_has_no_data_not_zeros() -> None:
+    """Ноль зачтённых матчей должен читаться как «неизвестно», а не «сухие матчи».
+
+    Если у команды в каждом матче было два вратаря, распределить командные броски
+    и голы между ними нельзя. Показатели тогда обязаны остаться незаполненными:
+    «ПШ 0, ОБ 0» выглядело бы как идеальная игра.
+    """
+    game_id = uuid.uuid4()
+    g1, g2 = uuid.uuid4(), uuid.uuid4()
+    totals, ambiguous = split_goalie_stats(
+        {game_id: MATCH_1}, {(game_id, ISKRA): [g1, g2]}, minutes_per_game=45,
+    )
+    assert (game_id, ISKRA) in ambiguous
+    for gid in (g1, g2):
+        assert totals[gid].games_counted == 0
+        assert totals[gid].has_data is False
+        assert totals[gid].games_ambiguous == 1
+
+
+def test_single_goalie_counts_the_game() -> None:
+    game_id = uuid.uuid4()
+    goalie = uuid.uuid4()
+    totals, _ = split_goalie_stats({game_id: MATCH_1}, {(game_id, ISKRA): [goalie]}, 45)
+    assert totals[goalie].games_counted == 1
+    assert totals[goalie].has_data is True
+
+
 def test_split_goalie_stats_two_goalies_is_not_attributed() -> None:
     """Табло относится к команде целиком: с двумя вратарями делить нечем."""
     game_id = uuid.uuid4()
