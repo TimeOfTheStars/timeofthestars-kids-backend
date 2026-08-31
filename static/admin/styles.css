@@ -610,3 +610,8 @@ textarea {
 .roster-team .row.space-between {
   margin-bottom: 6px;
 }
+
+.lineup-row .goalie-minutes {
+  width: 4.5em;
+  margin-left: 6px;
+}

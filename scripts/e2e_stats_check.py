@@ -437,6 +437,43 @@ async def phase_guards() -> None:
         tt = next(x for x in (await c.get("/tournaments")).json() if x["id"] == T["id"])
         check("teams[] в /tournaments", "city" in tt["teams"][0], True)
 
+        print("\n--- 8d. два вратаря: ПШ/ОБ неизвестны, минуты вручную ---")
+        # events не передаём: таймлайн не меняется, правим только состав.
+        base_lines = [{"player_id": sl["player_id"], "team_id": sl["team_id"],
+                       "is_goalie": sl["is_goalie"]} for sl in P["stat_lines"]]
+        second = next(sl for sl in P["stat_lines"]
+                      if not sl["is_goalie"] and sl["team_id"] == iskra["id"])
+        two_gk = []
+        for entry in base_lines:
+            e = dict(entry)
+            if e["team_id"] == iskra["id"] and (
+                e["is_goalie"] or e["player_id"] == second["player_id"]
+            ):
+                e["is_goalie"] = True
+                e["minutes_played"] = 15
+            two_gk.append(e)
+        r = await c.put(f"/api/admin/games/{G['id']}/protocol", headers=H, json={
+            "score_a": 1, "score_b": 8, "shots_a": 8, "shots_b": 26, "stat_lines": two_gk})
+        check("протокол с двумя вратарями сохранён", r.status_code, 200)
+        d = r.json()
+        check("команда помечена неоднозначной", len(d["goalie_ambiguous_team_ids"]), 1)
+        gk_lines = [x for x in d["stat_lines"] if x["is_goalie"] and x["team_id"] == iskra["id"]]
+        check("вратарей у команды", len(gk_lines), 2)
+        check("ПШ/ОБ не начислены", {(x["goals_against"], x["saves"]) for x in gk_lines}, {(None, None)})
+        check("минуты записаны обоим", {x["minutes_played"] for x in gk_lines}, {15})
+        both = [x for x in (await c.get(f"/tournaments/{T['id']}/players")).json()
+                if x["isGoalie"] and x["team"]["id"] == iskra["id"]]
+        check("в турнире: минуты есть, ПШ нет",
+              {(x["goalsAgainst"], x["saves"], x["minutesPlayed"]) for x in both},
+              {(None, None, 15)})
+        # Возвращаем как было
+        r = await c.put(f"/api/admin/games/{G['id']}/protocol", headers=H, json={
+            "score_a": 1, "score_b": 8, "shots_a": 8, "shots_b": 26, "stat_lines": base_lines})
+        check("протокол восстановлен", r.status_code, 200)
+        check("ПШ/ОБ вернулись",
+              next(x["goals_against"] for x in r.json()["stat_lines"]
+                   if x["full_name"] == "Едигарев Роман"), 8)
+
         print("\n--- 9. защита от смены команд у заполненного матча ---")
         r = await c.patch(f"/api/admin/games/{G['id']}", headers=H,
                           json={"team_a_id": impuls["id"], "team_b_id": iskra["id"]})

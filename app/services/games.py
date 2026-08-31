@@ -190,6 +190,7 @@ async def save_protocol(
                 player_id=line.player_id,
                 team_id=line.team_id,
                 is_goalie=line.is_goalie,
+                minutes_played=line.minutes_played,
                 goals=t["goals"],
                 assists=t["assists"],
             ),

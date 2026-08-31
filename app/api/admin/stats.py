@@ -445,6 +445,7 @@ async def _build_protocol(session: AsyncSession, game: Game) -> ProtocolOut:
             points=line.goals + line.assists,
             goals_against=goalie_values.get(line.player_id, (None, None))[0],
             saves=goalie_values.get(line.player_id, (None, None))[1],
+            minutes_played=line.minutes_played,
         )
         for line in game.stat_lines
     ]

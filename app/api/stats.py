@@ -216,7 +216,11 @@ async def game_protocol(
                     is_goalie=line.is_goalie,
                     goals_against=conceded,
                     saves=saves,
-                    minutes_played=minutes_per_game if conceded is not None else None,
+                    minutes_played=(
+                        line.minutes_played
+                        if line.minutes_played is not None
+                        else (minutes_per_game if conceded is not None else None)
+                    ),
                 )
             )
         out.sort(key=lambda p: (not p.is_goalie, p.number is None, p.number or 0))

@@ -439,6 +439,23 @@ async def tournament_players_with_stats(
         await _goalie_map(session, tournament_id),
         minutes_per_game,
     )
+    # Вписанные вручную минуты перекрывают расчёт: они нужны там, где вратарей
+    # у команды было двое и ПШ/ОБ распределить нельзя, а время известно.
+    manual_minutes_stmt = (
+        select(
+            GamePlayerStat.player_id,
+            func.coalesce(func.sum(GamePlayerStat.minutes_played), 0),
+        )
+        .join(Game, Game.id == GamePlayerStat.game_id)
+        .where(
+            Game.tournament_id == tournament_id,
+            GamePlayerStat.minutes_played.is_not(None),
+        )
+        .group_by(GamePlayerStat.player_id)
+    )
+    manual_minutes = {
+        pid: int(total) for pid, total in (await session.execute(manual_minutes_stmt)).all()
+    }
 
     rows: list[RosterStatRow] = []
     for entry in entries:
@@ -458,6 +475,9 @@ async def tournament_players_with_stats(
             row.goals_against = acc.goals_against
             row.saves = acc.saves if acc.saves_known else None
             row.minutes_played = acc.minutes_played or None
+        # Минуты не зависят от has_data: время известно даже когда голы поделить нельзя.
+        if row.is_goalie and entry.player_id in manual_minutes:
+            row.minutes_played = manual_minutes[entry.player_id] or None
         rows.append(row)
     return rows
 
@@ -533,6 +553,7 @@ async def goalie_totals_for_player(
             Game.shots_b,
             Tournament.period_minutes,
             Tournament.periods_count,
+            GamePlayerStat.minutes_played,
         )
         .join(Game, Game.id == GamePlayerStat.game_id)
         .join(Tournament, Tournament.id == Game.tournament_id)
@@ -579,6 +600,7 @@ async def goalie_totals_for_player(
         shots_b,
         period_minutes,
         periods_count,
+        manual_minutes,
     ) in rows:
         targets = [
             career,
@@ -586,8 +608,12 @@ async def goalie_totals_for_player(
             by_team.setdefault(own_team_id, GoalieAccumulator()),
         ]
         if goalie_counts.get((game_id, own_team_id), 0) != 1:
+            # ПШ/ОБ распределить нельзя, но вписанные минуты всё равно учитываем:
+            # время на льду известно и не зависит от делимости голов.
             for acc in targets:
                 acc.games_ambiguous += 1
+                if manual_minutes is not None:
+                    acc.minutes_played += manual_minutes
             continue
         for acc in targets:
             acc.games_counted += 1
@@ -596,7 +622,7 @@ async def goalie_totals_for_player(
         conceded = score_b if is_home else score_a
         opp_shots = shots_b if is_home else shots_a
         saves = None if opp_shots is None else max(opp_shots - conceded, 0)
-        minutes = (
+        minutes = manual_minutes if manual_minutes is not None else (
             period_minutes * periods_count if period_minutes and periods_count else 0
         )
         for acc in targets:
@@ -693,12 +719,15 @@ async def player_breakdown(
     )
 
     def _apply(totals: CareerTotals, acc: GoalieAccumulator | None) -> CareerTotals:
-        # Без зачтённых матчей вратарские остаются None — «неизвестно», а не нули.
-        if acc is None or not acc.has_data:
+        if acc is None:
+            return totals
+        # Минуты не зависят от делимости голов: если время вписано, показываем его.
+        totals.minutes_played = acc.minutes_played or None
+        # Без зачтённых матчей ПШ/ОБ остаются None — «неизвестно», а не нули.
+        if not acc.has_data:
             return totals
         totals.goals_against = acc.goals_against
         totals.saves = acc.saves if acc.saves_known else None
-        totals.minutes_played = acc.minutes_played or None
         return totals
 
     _apply(career, g_career)

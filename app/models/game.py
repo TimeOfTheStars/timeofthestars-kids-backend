@@ -73,6 +73,10 @@ class GamePlayerStat(Base):
         nullable=False,
     )
     is_goalie: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Минуты вратаря в этом матче, вписанные руками. Нужны, когда у команды было
+    # два вратаря: ПШ/ОБ из табло между ними не делятся, а время известно.
+    # None — минуты считаются по регламенту для единственного вратаря команды.
+    minutes_played: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Производные: перезаписываются из game_events в save_protocol().
     goals: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     assists: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

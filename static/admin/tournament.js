@@ -460,10 +460,13 @@ function playedMap(side) {
     if (!cb.checked) return;
     const pid = cb.dataset.played;
     const goalie = host.querySelector(`[data-goalie="${pid}"]`);
+    const minsEl = host.querySelector(`[data-minutes="${pid}"]`);
+    const rawMins = minsEl ? String(minsEl.value).trim() : "";
     out.set(pid, {
       number: cb.dataset.number ? Number.parseInt(cb.dataset.number, 10) : null,
       name: cb.dataset.name,
       isGoalie: !!(goalie && goalie.checked),
+      minutes: rawMins === "" ? null : Number.parseInt(rawMins, 10),
     });
   });
   return out;
@@ -514,14 +517,32 @@ function renderLineup(side, teamId, playedLines) {
     goalie.type = "checkbox";
     goalie.dataset.goalie = e.player_id;
     goalie.checked = line ? !!line.is_goalie : e.position === "вратарь";
-    goalie.addEventListener("change", refreshDerived);
     goalieWrap.appendChild(goalie);
     goalieWrap.appendChild(document.createTextNode(" вратарь"));
+
+    // Минуты нужны, когда вратарей у команды двое: ПШ/ОБ тогда не считаются,
+    // а время на льду известно. Пусто — минуты берутся из регламента турнира.
+    const mins = document.createElement("input");
+    mins.type = "number";
+    mins.min = "0";
+    mins.max = "600";
+    mins.placeholder = "мин";
+    mins.title = "Минуты в воротах. Пусто — по регламенту турнира";
+    mins.className = "goalie-minutes";
+    mins.dataset.minutes = e.player_id;
+    mins.value = line && line.minutes_played != null ? String(line.minutes_played) : "";
+    const syncMins = () => {
+      mins.classList.toggle("hidden", !goalie.checked);
+      if (!goalie.checked) mins.value = "";
+    };
+    syncMins();
+    goalie.addEventListener("change", () => { syncMins(); refreshDerived(); });
 
     row.appendChild(played);
     row.appendChild(num);
     row.appendChild(name);
     row.appendChild(goalieWrap);
+    row.appendChild(mins);
     host.appendChild(row);
   }
 }
@@ -692,7 +713,8 @@ function renderGoalieHints() {
     if (goalies.length > 1) {
       el.textContent =
         "Отмечено больше одного вратаря. Броски и голы в табло относятся к команде целиком, " +
-        "поэтому распределить их между вратарями нельзя — матч не войдёт в их ПШ/ОБ.";
+        "поэтому распределить их между вратарями нельзя — матч не войдёт в их ПШ/ОБ. " +
+        "Минуты можно развести вручную в поле рядом с отметкой «вратарь».";
       show(el, true);
       continue;
     }
@@ -765,7 +787,9 @@ async function saveProtocol() {
   const stat_lines = [];
   for (const [side, teamId] of [["a", p.teamAId], ["b", p.teamBId]]) {
     for (const [pid, info] of playedMap(side)) {
-      stat_lines.push({ player_id: pid, team_id: teamId, is_goalie: info.isGoalie });
+      const sl = { player_id: pid, team_id: teamId, is_goalie: info.isGoalie };
+      if (info.isGoalie && info.minutes != null) sl.minutes_played = info.minutes;
+      stat_lines.push(sl);
     }
   }
 

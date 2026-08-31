@@ -131,6 +131,9 @@ class PlayerStatLine(BaseModel):
     player_id: uuid.UUID
     team_id: uuid.UUID
     is_goalie: bool = False
+    # Минуты вратаря в матче. Заполняются, когда вратарей у команды двое и время
+    # надо развести руками; иначе считаются по регламенту турнира.
+    minutes_played: int | None = Field(default=None, ge=0, le=600)
 
 
 class GameEventIn(BaseModel):
@@ -216,6 +219,8 @@ class ProtocolStatLineOut(BaseModel):
     # Только для вратарей и только когда вратарь у команды в матче один.
     goals_against: int | None = None
     saves: int | None = None
+    # Вписанные минуты (если заполнены) либо расчёт по регламенту.
+    minutes_played: int | None = None
 
 
 class ProtocolEventOut(BaseModel):
