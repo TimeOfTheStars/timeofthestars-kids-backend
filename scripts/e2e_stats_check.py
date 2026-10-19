@@ -492,6 +492,66 @@ async def phase_guards() -> None:
         pr = (await c.get(f"/api/admin/games/{G['id']}/protocol", headers=H)).json()
         check("протокол не пострадал", len(pr["stat_lines"]), 26)
 
+        print("\n--- 11. буллиты: очко проигравшему, в таблице и в карьере ---")
+        # Карьера считается отдельным SQL-запросом, а не тем же кодом, что таблица
+        # турнира: однажды колонку добавили в SELECT и забыли в конструкторе
+        # TeamCareer — юнит-тесты этого не видят, нужна сквозная проверка.
+        async def standing(team_id: str) -> dict:
+            rows = (await c.get(f"/tournaments/{T['id']}/standings")).json()
+            return next(r for r in rows if r["team"]["id"] == team_id)
+
+        async def career(team_id: str) -> dict:
+            teams = (await c.get("/teams")).json()
+            return next(x for x in teams if x["id"] == team_id)["stats"]
+
+        g_adm_score = (await c.get(f"/api/admin/games/{G['id']}", headers=H)).json()
+        st_before, car_before = await standing(iskra["id"]), await career(iskra["id"])
+        check("до: ПБ в таблице", st_before["shootoutLosses"], 0)
+        r = await c.patch(f"/api/admin/games/{G['id']}", headers=H, json={"is_shootout": True})
+        check("матч помечен буллитным", (r.status_code, r.json()["is_shootout"]), (200, True))
+
+        st, car = await standing(iskra["id"]), await career(iskra["id"])
+        check("таблица: очко начислено", st["points"], st_before["points"] + 1)
+        check("таблица: поражение осталось", st["losses"], st_before["losses"])
+        check("таблица: ПБ внутри П", st["shootoutLosses"], 1)
+        check("карьера: ПБ выросло", car["shootoutLosses"], car_before["shootoutLosses"] + 1)
+        check("карьера: очко начислено", car["points"], car_before["points"] + 1)
+        check("карьера: поражение осталось", car["losses"], car_before["losses"])
+
+        g_pub = next(x for x in (await c.get(f"/tournaments/{T['id']}/games")).json()
+                     if x["id"] == G["id"])
+        check("публичный матч: isShootout", g_pub["isShootout"], True)
+
+        # Пересохранение протокола не должно сбрасывать флаг: ProtocolRequest его не несёт.
+        cur = (await c.get(f"/api/admin/games/{G['id']}/protocol", headers=H)).json()
+        again = {
+            "score_a": g_adm_score["score_a"], "score_b": g_adm_score["score_b"],
+            "shots_a": g_adm_score["shots_a"], "shots_b": g_adm_score["shots_b"],
+            "stat_lines": [
+                {"team_id": l["team_id"], "player_id": l["player_id"],
+                 "is_goalie": l["is_goalie"], "minutes_played": l["minutes_played"]}
+                for l in cur["stat_lines"]
+            ],
+            "events": [
+                {k: v for k, v in {
+                    "team_id": e["team_id"], "period": e["period"], "time": e["time"],
+                    "player_id": e["player_id"],
+                    "assist1_player_id": e["assist1_player_id"],
+                    "assist2_player_id": e["assist2_player_id"],
+                }.items() if v is not None}
+                for e in cur["events"]
+            ],
+        }
+        r = await c.put(f"/api/admin/games/{G['id']}/protocol", headers=H, json=again)
+        check("протокол пересохранён", r.status_code, 200)
+        g_adm = (await c.get(f"/api/admin/games/{G['id']}", headers=H)).json()
+        check("флаг пережил протокол", g_adm["is_shootout"], True)
+
+        r = await c.patch(f"/api/admin/games/{G['id']}", headers=H, json={"is_shootout": False})
+        check("флаг снимается", r.json()["is_shootout"], False)
+        check("очки вернулись", (await standing(iskra["id"]))["points"], st_before["points"])
+        check("карьера вернулась", (await career(iskra["id"]))["points"], car_before["points"])
+
 
 
 

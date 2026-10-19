@@ -831,6 +831,7 @@ async def team_career_stats_bulk(
             wins=int(row.wins),
             draws=int(row.draws),
             losses=int(row.losses),
+            shootout_losses=int(row.shootout_losses),
             goals_for=int(row.goals_for),
             goals_against=int(row.goals_against),
         )
