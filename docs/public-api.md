@@ -97,15 +97,20 @@ curl -s https://api.timeofthestars-kids.ru/tournaments
 Таблица турнира. **Уже отсортирована** — место равно `place`, оно же индекс + 1.
 Не пересортировывайте: порядок задаёт цепочка `очки → разница шайб → забитые шайбы → название`.
 
-Очки: **победа 2, ничья 1, поражение 0**. Дополнительного времени и буллитов в схеме нет.
+Очки: **победа 2 (в том числе по буллитам), поражение по буллитам 1, ничья 1, поражение 0**.
+Дополнительного времени в схеме нет — только серия буллитов (`isShootout` у матча).
 В таблицу идут все матчи с заполненным счётом — стадий и плей-офф не существует.
+
+> **`points` не выводится из `wins` и `draws`.** Буллитное поражение тоже даёт очко, поэтому
+> `points` может быть больше, чем `wins * 2 + draws`. Разницу объясняет `shootoutLosses` —
+> сколько из `losses` пришлось на буллиты. Считать очки на клиенте не нужно.
 
 ```json
 [
   {
     "place": 1,
     "team": { "id": "3f6c3db1-…", "name": "Звезда", "city": null, "logo": "https://…" },
-    "games": 3, "wins": 3, "draws": 0, "losses": 0,
+    "games": 3, "wins": 3, "draws": 0, "losses": 0, "shootoutLosses": 0,
     "goalsFor": 22, "goalsAgainst": 8, "goalDiff": 14, "points": 6
   }
 ]
@@ -133,7 +138,8 @@ curl -s https://api.timeofthestars-kids.ru/tournaments
     "shotsA": 8, "shotsB": 26,
     "videoUrl": null,
     "scan": "https://…/static/protocols/….pdf",
-    "isFinished": true
+    "isFinished": true,
+    "isShootout": false
   }
 ]
 ```
@@ -145,6 +151,7 @@ curl -s https://api.timeofthestars-kids.ru/tournaments
 | `shotsA` / `shotsB` | «Броски» из табло. Из них выводится вратарская статистика |
 | `scan` | Скан бумажного протокола — картинка или PDF, `null` если не приложен |
 | `isFinished` | `true`, когда заполнены **оба** счёта. Ставит сервер |
+| `isShootout` | Матч решён серией буллитов. Проигравший получает 1 очко вместо 0. На сайте счёт уместно показывать как «3:2 Б» |
 
 ---
 
@@ -324,7 +331,8 @@ curl -s "https://api.timeofthestars-kids.ru/tournaments/{id}/best-players?limit=
 | `games` | Матчей с заполненным счётом |
 | `wins` / `draws` / `losses` | По результату матча |
 | `goalsFor` / `goalsAgainst` / `goalDiff` | Шайбы за всю историю |
-| `points` | 2 за победу, 1 за ничью |
+| `points` | 2 за победу (в т.ч. по буллитам), 1 за ничью, 1 за поражение по буллитам |
+| `shootoutLosses` | Сколько из `losses` пришлось на буллиты |
 
 > ⚠️ Показатели могут включать **поправку на историю вне системы**, заданную администратором.
 > Подробно — [statistics.md](statistics.md).

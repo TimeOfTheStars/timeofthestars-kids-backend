@@ -228,6 +228,10 @@ class Game(Base):
     scan: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # Выводится сервисом (оба счёта заданы), клиент его не присылает.
     is_finished: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Победа в серии буллитов. Проигравший получает 1 очко вместо 0 — иначе исход
+    # ничем не отличается от победы в основное время. Овертайма в схеме нет.
+    # На ничейном счёте флаг игнорируется расчётом: серии там не было.
+    is_shootout: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

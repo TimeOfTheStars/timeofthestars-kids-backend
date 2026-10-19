@@ -11,6 +11,7 @@ import pytest
 
 from app.services.stats import (
     DRAW_POINTS,
+    SHOOTOUT_LOSS_POINTS,
     TEAM_STAT_FIELDS,
     WIN_POINTS,
     TeamCareer,
@@ -60,6 +61,16 @@ def test_negative_correction_allowed() -> None:
     effective, corrected = apply_corrections(LOKO, {"games": -1})
     assert effective.games == 2
     assert corrected == {"games"}
+
+
+def test_points_include_shootout_losses() -> None:
+    """Буллитные поражения дают очки — иначе карьера разойдётся с таблицей турнира."""
+    assert TeamCareer(wins=1, shootout_losses=1).points == WIN_POINTS + SHOOTOUT_LOSS_POINTS
+    assert TeamCareer(wins=3, draws=1, shootout_losses=2).points == (
+        3 * WIN_POINTS + DRAW_POINTS + 2 * SHOOTOUT_LOSS_POINTS
+    )
+    # Обычные поражения очков не дают.
+    assert TeamCareer(wins=1, losses=5).points == WIN_POINTS
 
 
 def test_points_follow_effective_totals() -> None:

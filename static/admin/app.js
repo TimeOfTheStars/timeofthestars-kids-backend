@@ -502,7 +502,7 @@ async function loadTeams() {
   const data = await apiFetch("/teams?limit=500");
   window.__teamsCache = data;
   if (!data.length) {
-    rows.innerHTML = `<tr><td colspan="12" class="muted">Команд пока нет</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="13" class="muted">Команд пока нет</td></tr>`;
     return;
   }
   for (const t of data) {
@@ -532,6 +532,7 @@ async function loadTeams() {
       <td data-label="В">${stat("wins")}</td>
       <td data-label="Н">${stat("draws")}</td>
       <td data-label="П">${stat("losses")}</td>
+      <td data-label="ПБ">${stat("shootout_losses")}</td>
       <td data-label="Заб">${stat("goals_for")}</td>
       <td data-label="Проп">${stat("goals_against")}</td>
       <td data-label="О">${t.stats ? t.stats.points : 0}</td>
@@ -602,6 +603,7 @@ const TEAM_STAT_LABELS = {
   wins: "побед",
   draws: "ничьих",
   losses: "поражений",
+  shootout_losses: "поражений по буллитам",
   goals_for: "забито",
   goals_against: "пропущено",
 };
@@ -613,6 +615,7 @@ const TEAM_STAT_INPUTS = {
   wins: "teManualWins",
   draws: "teManualDraws",
   losses: "teManualLosses",
+  shootout_losses: "teManualShootoutLosses",
   goals_for: "teManualGoalsFor",
   goals_against: "teManualGoalsAgainst",
 };

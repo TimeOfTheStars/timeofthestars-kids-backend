@@ -168,12 +168,14 @@ FK стоит с `RESTRICT`.
 | `total_wins` | int \| null | |
 | `total_draws` | int \| null | |
 | `total_losses` | int \| null | |
+| `total_shootout_losses` | int \| null | Из них по буллитам — каждое даёт очко |
 | `total_goals_for` | int \| null | |
 | `total_goals_against` | int \| null | |
 
 **`total_*` — это итог, а не дельта.** Сервер вычтет из него свежий расчёт по матчам и
 сохранит разницу как поправку, поэтому статистика продолжит считаться. `null` убирает
-поправку. Очки не задаются — выводятся из итоговых побед и ничьих. Подробно:
+поправку. Очки не задаются — выводятся из итоговых побед, ничьих и буллитных поражений.
+Подробно:
 [statistics.md](statistics.md).
 
 ### Ответ
@@ -187,9 +189,11 @@ FK стоит с `RESTRICT`.
   "description": null,
 
   "stats":    { "tournaments": 7, "games": 23, "wins": 13, "draws": 0, "losses": 2,
-                "goals_for": 13, "goals_against": 13, "goal_diff": 0, "points": 26 },
+                "shootout_losses": 1,
+                "goals_for": 13, "goals_against": 13, "goal_diff": 0, "points": 27 },
   "computed": { "tournaments": 1, "games": 3,  "wins": 1,  "draws": 0, "losses": 2,
-                "goals_for": 13, "goals_against": 13, "goal_diff": 0, "points": 2 },
+                "shootout_losses": 1,
+                "goals_for": 13, "goals_against": 13, "goal_diff": 0, "points": 3 },
   "corrections": { "tournaments": 6, "games": 20, "wins": 12 },
   "corrected_fields": ["games", "tournaments", "wins"],
 
@@ -312,9 +316,12 @@ FK стоит с `RESTRICT`.
 | `shots_a` / `shots_b` | int 0…999 \| null | «Броски» из табло |
 | `video_url` | string ≤ 1024 \| null | |
 | `scan` | string ≤ 1024 \| null | URL из `/uploads/game-scan` |
+| `is_shootout` | bool | Матч решён серией буллитов: проигравший получает 1 очко вместо 0. На ничейном счёте игнорируется |
 | `position` | int 0…10000 \| null | «МАТЧ №». Не задан при создании — берётся следующий |
 
 `is_finished` **не принимается** — сервер ставит его сам, когда заполнены оба счёта.
+`is_shootout`, наоборот, ставится только руками: из счёта он не выводится. Через
+`PUT /protocol` он **не передаётся**, поэтому пересохранение протокола его не сбрасывает.
 
 **Смена команд у матча с заполненным протоколом отклоняется** (`409`): иначе строки
 участия и голы остались бы от прежних составов. Проверяется факт смены, а не наличие поля

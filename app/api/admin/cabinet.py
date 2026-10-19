@@ -500,6 +500,7 @@ def _career_admin(c: stats_service.TeamCareer) -> TeamCareerAdmin:
         wins=c.wins,
         draws=c.draws,
         losses=c.losses,
+        shootout_losses=c.shootout_losses,
         goals_for=c.goals_for,
         goals_against=c.goals_against,
         goal_diff=c.goal_diff,

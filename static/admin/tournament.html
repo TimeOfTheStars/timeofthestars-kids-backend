@@ -64,6 +64,7 @@
                 <label class="grow">Броски — команда 1 <input id="gcShotsA" type="number" min="0" max="999" /></label>
                 <label class="grow">Броски — команда 2 <input id="gcShotsB" type="number" min="0" max="999" /></label>
               </div>
+              <label class="checkbox-row"><input id="gcShootout" type="checkbox" /> Победа по буллитам <span class="muted">(проигравший получит 1 очко)</span></label>
             </fieldset>
             <label>Ссылка на видео <input id="gcVideoUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
             <label>Скан протокола
@@ -110,7 +111,7 @@
             <h2>Таблица</h2>
             <button type="button" id="refreshStandingsBtn" class="btn">Обновить</button>
           </div>
-          <p class="muted">Считается на лету по всем матчам с заполненным счётом. Победа — 2 очка, ничья — 1.</p>
+          <p class="muted">Считается на лету по всем матчам с заполненным счётом. Победа — 2 очка (в том числе по буллитам), поражение по буллитам — 1, ничья — 1. Поэтому очков может быть больше, чем В×2 + Н.</p>
           <div class="table-wrap">
             <table class="table">
               <thead>
@@ -167,6 +168,7 @@
               <label class="grow"><span id="geLabelShotsA">Броски — команда 1</span> <input id="geShotsA" type="number" min="0" max="999" /></label>
               <label class="grow"><span id="geLabelShotsB">Броски — команда 2</span> <input id="geShotsB" type="number" min="0" max="999" /></label>
             </div>
+            <label class="checkbox-row"><input id="geShootout" type="checkbox" /> Победа по буллитам <span class="muted">(проигравший получит 1 очко)</span></label>
           </fieldset>
           <label>Ссылка на видео <input id="geVideoUrl" type="url" maxlength="1024" placeholder="https://..." /></label>
           <label>Скан протокола

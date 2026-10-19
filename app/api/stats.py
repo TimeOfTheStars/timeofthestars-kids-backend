@@ -92,6 +92,7 @@ async def tournament_standings(
             wins=core.wins,
             draws=core.draws,
             losses=core.losses,
+            shootout_losses=core.shootout_losses,
             goals_for=core.goals_for,
             goals_against=core.goals_against,
             goal_diff=core.goal_diff,
@@ -123,6 +124,7 @@ def _game_public(game: Game, base: str | None) -> GamePublic:
         video_url=game.video_url,
         scan=absolutize(game.scan, base),
         is_finished=game.is_finished,
+        is_shootout=game.is_shootout,
     )
 
 

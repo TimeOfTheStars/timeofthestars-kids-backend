@@ -280,9 +280,10 @@
                       <th title="Побед">В</th>
                       <th title="Ничьих">Н</th>
                       <th title="Поражений">П</th>
+                      <th title="Из них по буллитам — каждое даёт очко">ПБ</th>
                       <th title="Забито">Заб</th>
                       <th title="Пропущено">Проп</th>
-                      <th title="Очки: 2 за победу, 1 за ничью">О</th>
+                      <th title="Очки: 2 за победу (в т.ч. по буллитам), 1 за ничью, 1 за поражение по буллитам">О</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -649,6 +650,7 @@
             <div class="row gap fields-row">
               <label class="grow">Ничьих <input id="teManualDraws" type="number" min="0" max="100000" /></label>
               <label class="grow">Поражений <input id="teManualLosses" type="number" min="0" max="100000" /></label>
+              <label class="grow">Из них по буллитам <input id="teManualShootoutLosses" type="number" min="0" max="100000" /></label>
             </div>
             <div class="row gap fields-row">
               <label class="grow">Забито <input id="teManualGoalsFor" type="number" min="0" max="1000000" /></label>

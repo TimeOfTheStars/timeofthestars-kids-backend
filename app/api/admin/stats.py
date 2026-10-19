@@ -268,6 +268,7 @@ def _game_item(game: Game) -> GameListItem:
         video_url=game.video_url,
         scan=game.scan,
         is_finished=game.is_finished,
+        is_shootout=game.is_shootout,
         created_at=game.created_at,
         updated_at=game.updated_at,
     )

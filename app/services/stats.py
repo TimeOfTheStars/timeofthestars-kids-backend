@@ -25,6 +25,8 @@ from app.models.tournament_player import TournamentPlayer
 
 WIN_POINTS = 2
 DRAW_POINTS = 1
+# Проигравший по буллитам забирает очко: в основное время он матч не проиграл.
+SHOOTOUT_LOSS_POINTS = 1
 
 # ============================================================== чистое ядро
 
@@ -39,6 +41,9 @@ class GameScore:
     score_b: int
     shots_a: int | None = None
     shots_b: int | None = None
+    # Матч решён серией буллитов. Для вратарских расчётов не нужен, поэтому
+    # с умолчанием: три из четырёх мест сборки GameScore его не передают.
+    is_shootout: bool = False
 
 
 @dataclass
@@ -51,12 +56,20 @@ class StandingCore:
     wins: int = 0
     draws: int = 0
     losses: int = 0
+    # Подмножество losses, а не отдельная категория: буллитное поражение
+    # считается и поражением тоже, колонка «П» в таблице его включает.
+    shootout_losses: int = 0
     goals_for: int = 0
     goals_against: int = 0
 
     @property
     def points(self) -> int:
-        return self.wins * WIN_POINTS + self.draws * DRAW_POINTS
+        """Очки нельзя вывести из одних побед и ничьих — буллитные поражения тоже дают."""
+        return (
+            self.wins * WIN_POINTS
+            + self.draws * DRAW_POINTS
+            + self.shootout_losses * SHOOTOUT_LOSS_POINTS
+        )
 
     @property
     def goal_diff(self) -> int:
@@ -88,10 +101,15 @@ def compute_standings_core(
         if s.score_a > s.score_b:
             home.wins += 1
             away.losses += 1
+            if s.is_shootout:
+                away.shootout_losses += 1
         elif s.score_a < s.score_b:
             away.wins += 1
             home.losses += 1
+            if s.is_shootout:
+                home.shootout_losses += 1
         else:
+            # Ничья: серии буллитов по определению не было, флаг игнорируем.
             home.draws += 1
             away.draws += 1
 
@@ -206,6 +224,7 @@ TEAM_STAT_FIELDS = (
     "wins",
     "draws",
     "losses",
+    "shootout_losses",
     "goals_for",
     "goals_against",
 )
@@ -220,13 +239,18 @@ class TeamCareer:
     wins: int = 0
     draws: int = 0
     losses: int = 0
+    shootout_losses: int = 0
     goals_for: int = 0
     goals_against: int = 0
 
     @property
     def points(self) -> int:
-        """Очки от ДЕЙСТВУЮЩИХ побед и ничьих — отдельной колонкой не хранятся."""
-        return self.wins * WIN_POINTS + self.draws * DRAW_POINTS
+        """Очки от ДЕЙСТВУЮЩИХ исходов — отдельной колонкой не хранятся."""
+        return (
+            self.wins * WIN_POINTS
+            + self.draws * DRAW_POINTS
+            + self.shootout_losses * SHOOTOUT_LOSS_POINTS
+        )
 
     @property
     def goal_diff(self) -> int:
@@ -348,6 +372,7 @@ def _to_game_score(g: Game) -> GameScore:
         score_b=g.score_b,
         shots_a=g.shots_a,
         shots_b=g.shots_b,
+        is_shootout=g.is_shootout,
     )
 
 
@@ -746,7 +771,7 @@ def _team_games_subquery():  # noqa: ANN202 — SQLAlchemy subquery
     """Сыгранные матчи в виде строк на КАЖДУЮ команду.
 
     Команда бывает и team_a, и team_b, поэтому нормализуем через UNION ALL двух
-    выборок к общему виду (team_id, tournament_id, забито, пропущено, В, Н, П).
+    выборок к общему виду (team_id, tournament_id, забито, пропущено, В, Н, П, ПБ).
     Так вся общая статистика считается одним группированным запросом.
     """
     played = and_(Game.score_a.is_not(None), Game.score_b.is_not(None))
@@ -760,6 +785,7 @@ def _team_games_subquery():  # noqa: ANN202 — SQLAlchemy subquery
             case((own > opp, 1), else_=0).label("win"),
             case((own == opp, 1), else_=0).label("draw"),
             case((own < opp, 1), else_=0).label("loss"),
+            case((and_(own < opp, Game.is_shootout), 1), else_=0).label("shootout_loss"),
         ).where(played)
 
     return union_all(
@@ -787,6 +813,7 @@ async def team_career_stats_bulk(
             func.coalesce(func.sum(sq.c.win), 0).label("wins"),
             func.coalesce(func.sum(sq.c.draw), 0).label("draws"),
             func.coalesce(func.sum(sq.c.loss), 0).label("losses"),
+            func.coalesce(func.sum(sq.c.shootout_loss), 0).label("shootout_losses"),
             func.coalesce(func.sum(sq.c.goals_for), 0).label("goals_for"),
             func.coalesce(func.sum(sq.c.goals_against), 0).label("goals_against"),
         )

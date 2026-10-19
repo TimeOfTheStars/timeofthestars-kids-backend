@@ -76,6 +76,7 @@ class TeamCareerAdmin(BaseModel):
     wins: int
     draws: int
     losses: int
+    shootout_losses: int
     goals_for: int
     goals_against: int
     goal_diff: int
@@ -109,7 +110,7 @@ class TeamStatTotals(BaseModel):
     статистика продолжает считаться: новые матчи попадают в итог сами, а
     внесённая правка не устаревает.
 
-    Очки не задаются: выводятся из итоговых побед и ничьих.
+    Очки не задаются: выводятся из итоговых побед, ничьих и буллитных поражений.
     """
 
     total_tournaments: int | None = Field(default=None, ge=0, le=10_000)
@@ -117,6 +118,7 @@ class TeamStatTotals(BaseModel):
     total_wins: int | None = Field(default=None, ge=0, le=100_000)
     total_draws: int | None = Field(default=None, ge=0, le=100_000)
     total_losses: int | None = Field(default=None, ge=0, le=100_000)
+    total_shootout_losses: int | None = Field(default=None, ge=0, le=100_000)
     total_goals_for: int | None = Field(default=None, ge=0, le=1_000_000)
     total_goals_against: int | None = Field(default=None, ge=0, le=1_000_000)
 

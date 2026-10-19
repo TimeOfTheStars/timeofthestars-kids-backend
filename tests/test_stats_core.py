@@ -54,6 +54,59 @@ def test_standings_draw_gives_one_point_each() -> None:
     assert all(r.draws == 1 and r.games == 1 for r in rows)
 
 
+def test_standings_shootout_loser_gets_one_point() -> None:
+    """Поражение по буллитам — очко, победа по буллитам — по-прежнему две."""
+    rows = compute_standings_core(
+        TEAMS,
+        [GameScore(team_a_id=ISKRA, team_b_id=IMPULS, score_a=4, score_b=5, is_shootout=True)],
+    )
+    winner = next(r for r in rows if r.team_id == IMPULS)
+    loser = next(r for r in rows if r.team_id == ISKRA)
+    assert winner.points == 2
+    assert loser.points == 1
+
+
+def test_standings_shootout_loss_counts_as_loss_too() -> None:
+    """Колонка «П» включает буллитные поражения: отдельной категории нет."""
+    rows = compute_standings_core(
+        TEAMS,
+        [GameScore(team_a_id=ISKRA, team_b_id=IMPULS, score_a=4, score_b=5, is_shootout=True)],
+    )
+    loser = next(r for r in rows if r.team_id == ISKRA)
+    assert loser.losses == 1
+    assert loser.shootout_losses == 1
+    winner = next(r for r in rows if r.team_id == IMPULS)
+    assert winner.wins == 1 and winner.shootout_losses == 0
+
+
+def test_standings_shootout_flag_ignored_on_draw() -> None:
+    """Ничья с флагом — противоречие в данных; считаем как обычную ничью."""
+    rows = compute_standings_core(
+        TEAMS,
+        [GameScore(team_a_id=ISKRA, team_b_id=IMPULS, score_a=2, score_b=2, is_shootout=True)],
+    )
+    assert [r.points for r in rows] == [1, 1]
+    assert all(r.shootout_losses == 0 for r in rows)
+
+
+def test_standings_shootout_loss_lifts_above_plain_win() -> None:
+    """Случай Витязя 18.10: победа + поражение по буллитам = 3 очка, выше чистой победы."""
+    rows = compute_standings_core(
+        [(ISKRA, "Витязь"), (IMPULS, "Время Звёзд"), (THIRD, "Звезда")],
+        [
+            GameScore(team_a_id=ISKRA, team_b_id=IMPULS, score_a=3, score_b=2),
+            GameScore(team_a_id=ISKRA, team_b_id=THIRD, score_a=4, score_b=5, is_shootout=True),
+            GameScore(team_a_id=IMPULS, team_b_id=THIRD, score_a=6, score_b=1),
+        ],
+    )
+    # Витязь первый с худшей разницей из троих — очки важнее разницы.
+    assert [(r.name, r.points, r.goal_diff) for r in rows] == [
+        ("Витязь", 3, 0),
+        ("Время Звёзд", 2, 4),
+        ("Звезда", 2, -4),
+    ]
+
+
 def test_standings_team_without_games_is_listed_with_zeros() -> None:
     """Заявленная команда без матчей должна быть в таблице, а не отсутствовать."""
     rows = compute_standings_core([*TEAMS, (THIRD, "ХК «ТРЕТИЙ»")], [MATCH_1])

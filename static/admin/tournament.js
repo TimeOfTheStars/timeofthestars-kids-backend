@@ -321,7 +321,10 @@ async function loadGames() {
   }
   for (const g of state.games) {
     const tr = document.createElement("tr");
-    const score = g.score_a != null && g.score_b != null ? `${g.score_a} : ${g.score_b}` : "—";
+    const score =
+      g.score_a != null && g.score_b != null
+        ? `${g.score_a} : ${g.score_b}${g.is_shootout ? " Б" : ""}`
+        : "—";
     const shots = g.shots_a != null && g.shots_b != null ? `${g.shots_a} : ${g.shots_b}` : "—";
     const when = `${fmtDate(g.date)}${g.time ? " · " + g.time : ""}`;
     tr.innerHTML = `
@@ -414,6 +417,7 @@ function openGameEditModal(g) {
   $("geScoreB").value = g.score_b ?? "";
   $("geShotsA").value = g.shots_a ?? "";
   $("geShotsB").value = g.shots_b ?? "";
+  $("geShootout").checked = !!g.is_shootout;
   $("geVideoUrl").value = g.video_url || "";
   $("geScan").value = g.scan || "";
   $("geLabelGoalsA").textContent = `Голы — ${g.team_a.name}`;
@@ -979,6 +983,7 @@ $("gameEditForm").addEventListener("submit", async (e) => {
     score_b: intOrNull($("geScoreB").value),
     shots_a: intOrNull($("geShotsA").value),
     shots_b: intOrNull($("geShotsB").value),
+    is_shootout: $("geShootout").checked,
     video_url: String($("geVideoUrl").value || "").trim() || null,
     scan: String($("geScan").value || "").trim() || null,
   };
@@ -1017,6 +1022,7 @@ $("gameCreateForm").addEventListener("submit", async (e) => {
     score_b: intOrNull($("gcScoreB").value),
     shots_a: intOrNull($("gcShotsA").value),
     shots_b: intOrNull($("gcShotsB").value),
+    is_shootout: $("gcShootout").checked,
     video_url: String($("gcVideoUrl").value || "").trim() || null,
     scan: String($("gcScan").value || "").trim() || null,
     position: intOrNull($("gcPosition").value),

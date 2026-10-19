@@ -50,6 +50,7 @@ class GameListItem(BaseModel):
     video_url: str | None
     scan: str | None
     is_finished: bool
+    is_shootout: bool
     created_at: datetime
     updated_at: datetime
 
@@ -72,6 +73,8 @@ class GameCreate(BaseModel):
     shots_b: int | None = Field(default=None, ge=0, le=999)
     video_url: str | None = Field(default=None, max_length=1024)
     scan: str | None = Field(default=None, max_length=1024)
+    # Матч решён серией буллитов: проигравший получает 1 очко вместо 0.
+    is_shootout: bool = False
     # Не задан — сервис поставит следующий «МАТЧ №».
     position: int | None = Field(default=None, ge=0, le=10_000)
 
@@ -104,6 +107,7 @@ class GameUpdate(BaseModel):
     shots_b: int | None = Field(default=None, ge=0, le=999)
     video_url: str | None = Field(default=None, max_length=1024)
     scan: str | None = Field(default=None, max_length=1024)
+    is_shootout: bool | None = None
     position: int | None = Field(default=None, ge=0, le=10_000)
 
     @field_validator("video_url", "scan")
@@ -289,6 +293,9 @@ class StandingRowPublic(BaseModel):
     wins: int
     draws: int
     losses: int
+    # Входит в losses. Отдаётся, чтобы очки были проверяемы: без этого числа
+    # непонятно, почему points может быть больше wins*2 + draws.
+    shootout_losses: int = Field(serialization_alias="shootoutLosses")
     goals_for: int = Field(serialization_alias="goalsFor")
     goals_against: int = Field(serialization_alias="goalsAgainst")
     goal_diff: int = Field(serialization_alias="goalDiff")
@@ -311,6 +318,7 @@ class GamePublic(BaseModel):
     video_url: str | None = Field(default=None, serialization_alias="videoUrl")
     scan: str | None = None
     is_finished: bool = Field(serialization_alias="isFinished")
+    is_shootout: bool = Field(serialization_alias="isShootout")
 
     @field_serializer("time")
     def _serialize_time(self, v: time_type | None) -> str | None:
@@ -405,6 +413,7 @@ class TeamCareerPublic(BaseModel):
     wins: int = 0
     draws: int = 0
     losses: int = 0
+    shootout_losses: int = Field(default=0, serialization_alias="shootoutLosses")
     goals_for: int = Field(default=0, serialization_alias="goalsFor")
     goals_against: int = Field(default=0, serialization_alias="goalsAgainst")
     goal_diff: int = Field(default=0, serialization_alias="goalDiff")

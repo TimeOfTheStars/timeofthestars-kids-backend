@@ -36,6 +36,7 @@ class Team(Base):
     extra_wins: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extra_draws: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extra_losses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extra_shootout_losses: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extra_goals_for: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extra_goals_against: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
